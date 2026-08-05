@@ -454,22 +454,32 @@ function QuestionsPanel({
 }) {
   return (
     <Panel title={`Questions — ${state.collectionName}`}>
-      {questions.map((q, i) => (
-        <button
-          key={q.id}
-          className={cn(
-            "flex min-h-14 items-center gap-2 rounded-lg border p-3 text-left text-sm transition-colors hover:bg-muted",
-            i === state.currentIndex && "border-primary bg-primary/10",
-          )}
-          onClick={() => act({ kind: "question", index: i })}
-        >
-          <Badge variant="secondary">{typeBadge[q.type]}</Badge>
-          <span className="min-w-0 flex-1">
-            {q.text || <em className="text-muted-foreground">(no text)</em>}
-          </span>
-          {q.image && <QuestionThumb src={q.image} />}
-        </button>
-      ))}
+      {questions.map((q, i) => {
+        const played = state.played.includes(i) && i !== state.currentIndex
+        return (
+          <button
+            key={q.id}
+            className={cn(
+              "flex min-h-14 items-center gap-2 rounded-lg border p-3 text-left text-sm transition-colors hover:bg-muted",
+              i === state.currentIndex && "border-primary bg-primary/10",
+              played && "opacity-50",
+            )}
+            onClick={() => act({ kind: "question", index: i })}
+          >
+            <Badge variant="secondary">{typeBadge[q.type]}</Badge>
+            <span className="min-w-0 flex-1">
+              {q.text || <em className="text-muted-foreground">(no text)</em>}
+            </span>
+            {played && (
+              <Check
+                className="size-4 shrink-0 text-muted-foreground"
+                aria-label="Already played"
+              />
+            )}
+            {q.image && <QuestionThumb src={q.image} />}
+          </button>
+        )
+      })}
       {state.currentIndex !== null && (
         <Button
           variant="outline"

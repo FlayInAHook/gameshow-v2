@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Link, createFileRoute } from "@tanstack/react-router"
-import { Plus, Trash2 } from "lucide-react"
+import { Download, Plus, Trash2, Upload } from "lucide-react"
 import { RevealImage, fileToDataUrl } from "@/components/reveal-image"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -37,11 +37,36 @@ function newQuestion(type: QuestionType): Question {
   return { id, type, text: "", answer: "" }
 }
 
+function exportCollection(c: Collection) {
+  const a = document.createElement("a")
+  a.href = URL.createObjectURL(
+    new Blob([JSON.stringify(c, null, 2)], { type: "application/json" }),
+  )
+  a.download = `${c.name}.json`
+  a.click()
+  URL.revokeObjectURL(a.href)
+}
+
 function CreatePage() {
   const [collections, setCollections] = useState<Array<Collection>>(loadCollections)
   const [selectedId, setSelectedId] = useState<string | null>(
     collections[0]?.id ?? null,
   )
+  const importRef = useRef<HTMLInputElement>(null)
+
+  async function importCollection(file: File) {
+    try {
+      const parsed = JSON.parse(await file.text()) as Collection
+      if (typeof parsed.name !== "string" || !Array.isArray(parsed.questions))
+        throw new Error("bad shape")
+      // fresh id so importing your own export doesn't collide
+      const col = { ...parsed, id: crypto.randomUUID() }
+      setCollections((cs) => [...cs, col])
+      setSelectedId(col.id)
+    } catch {
+      alert("Not a valid collection file.")
+    }
+  }
 
   useEffect(() => saveCollections(collections), [collections])
 
@@ -99,6 +124,15 @@ function CreatePage() {
               <Button
                 variant="ghost"
                 size="icon-sm"
+                title="Export as JSON"
+                onClick={() => exportCollection(c)}
+              >
+                <Download />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                title="Delete"
                 onClick={() => {
                   if (!confirm(`Delete "${c.name}"?`)) return
                   setCollections((cs) => cs.filter((x) => x.id !== c.id))
@@ -112,6 +146,20 @@ function CreatePage() {
           <Button variant="outline" onClick={addCollection}>
             <Plus /> New collection
           </Button>
+          <Button variant="outline" onClick={() => importRef.current?.click()}>
+            <Upload /> Import
+          </Button>
+          <input
+            ref={importRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              if (f) void importCollection(f)
+              e.target.value = ""
+            }}
+          />
         </div>
 
         {/* editor */}

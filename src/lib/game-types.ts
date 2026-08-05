@@ -43,6 +43,8 @@ export type RoomState = {
   hostConnected: boolean
   players: PlayerInfo[]
   currentIndex: number | null
+  // question indexes that have been shown at least once
+  played: number[]
   locked: boolean
   revealed: boolean
   // image-reveal progress 0..1

@@ -60,9 +60,33 @@ server {
 
     location @ssr {
         proxy_pass http://127.0.0.1:3167;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
+}
+```
+
+Plesk variant (no server-level `root` allowed): in *Additional nginx
+directives*, keep the `/ws` and `@ssr`-style proxying but serve statics via
+per-location roots instead of `try_files`:
+
+```nginx
+location ^~ /assets/ {
+    root /path/to/gameshow-v2/dist/client;
+    expires 1y;
+    add_header Cache-Control "public, immutable";
+}
+location ~ ^/(favicon\.ico|manifest\.json|robots\.txt)$ {
+    root /path/to/gameshow-v2/dist/client;
+}
+location / {
+    proxy_pass http://127.0.0.1:3167;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
 }
 ```
 

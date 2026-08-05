@@ -17,6 +17,7 @@ type Room = {
   questions: Question[]
   phase: "playing" | "ended"
   currentIndex: number | null
+  played: number[]
   locked: boolean
   revealed: boolean
   reveal: number
@@ -43,6 +44,7 @@ function stateOf(room: Room): RoomState {
     hostConnected: room.hostConnected,
     players: [...room.players.values()],
     currentIndex: room.currentIndex,
+    played: room.played,
     locked: room.locked,
     revealed: room.revealed,
     reveal: room.reveal,
@@ -90,6 +92,7 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         questions: msg.questions,
         phase: "playing",
         currentIndex: null,
+        played: [],
         locked: false,
         revealed: false,
         reveal: 0,
@@ -179,6 +182,8 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
     switch (a.kind) {
       case "question":
         room.currentIndex = a.index
+        if (a.index !== null && !room.played.includes(a.index))
+          room.played.push(a.index)
         room.locked = false
         room.revealed = false
         room.buzzes = []
