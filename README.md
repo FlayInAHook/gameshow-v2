@@ -1,21 +1,29 @@
-# TanStack Start + shadcn/ui
+# Gameshow
 
-This is a template for a new TanStack Start project with React, TypeScript, and shadcn/ui.
+A tiny gameshow app for friends. Create question collections (stored in your
+browser's local storage), host a room, share the invite link, play.
 
-## Adding components
+- **Create** — build collections of Multiple Choice / Buzz / Free Input /
+  Image Reveal questions. Any question can carry an image (stored as a
+  compressed data-url in local storage). Image Reveal obscures the image with
+  stackable filters (zoom, blur, pixelate, scramble) that fade out on a timer
+  or as the host steps the reveal — with a live preview in the editor.
+- **Host** — pick a collection, get a room + invite link. Resizable panels for
+  players (points, rename, kick), questions, room settings, and actions
+  (award points, sounds, close round, leaderboard).
+- Buzzing is ping-compensated: the server measures each player's roundtrip and
+  credits half of it, so buzz order isn't decided by whoever has better wifi.
+- Everyone (host included) can close their tab and rejoin — state lives on the
+  websocket server. If the *server* restarts, the host just hosts again.
 
-To add components to your app, run the following command:
+## Run
+
+Two processes:
 
 ```bash
-npx shadcn@latest add button
+bun run dev      # web app on :3000
+bun run dev:ws   # websocket server on :3001
 ```
 
-This will place the ui components in the `components` directory.
-
-## Using components
-
-To use the components in your app, import them as follows:
-
-```tsx
-import { Button } from "@/components/ui/button";
-```
+Players on your LAN open the invite link (use your machine's IP instead of
+localhost).

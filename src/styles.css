@@ -128,3 +128,14 @@
     @apply font-sans;
     }
 }
+
+/* ponytail: CSS keyframes instead of gsap for the leaderboard reveal */
+@keyframes lb-in {
+  from {
+    opacity: 0;
+    transform: translateY(40px) scale(0.9);
+  }
+}
+.lb-row {
+  animation: lb-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
