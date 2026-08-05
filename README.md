@@ -32,8 +32,8 @@ localhost).
 
 ```bash
 bun run build       # -> dist/client (static) + dist/server/server.js (SSR only)
-bun run start       # SSR server, PORT env (default 3000)
-bun run start:ws    # websocket server on :3001
+bun run start       # SSR server on :3167 (PORT set in the script)
+bun run start:ws    # websocket server on :3168 (WS_PORT in src/lib/game-types.ts)
 ```
 
 The SSR server does not serve static files — nginx serves `dist/client`
@@ -47,7 +47,7 @@ server {
     root /path/to/gameshow-v2/dist/client;
 
     location /ws {
-        proxy_pass http://127.0.0.1:3001;
+        proxy_pass http://127.0.0.1:3168;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -59,7 +59,7 @@ server {
     }
 
     location @ssr {
-        proxy_pass http://127.0.0.1:3000;
+        proxy_pass http://127.0.0.1:3167;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-Proto $scheme;
     }

@@ -91,4 +91,4 @@ export type ServerMsg =
   | { type: "kicked" }
   | { type: "error"; message: string }
 
-export const WS_PORT = 3001
+export const WS_PORT = 3168
