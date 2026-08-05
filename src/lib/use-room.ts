@@ -21,7 +21,12 @@ export function useRoom(joinMsg: ClientMsg | null) {
     let retry: ReturnType<typeof setTimeout>
 
     function connect() {
-      const ws = new WebSocket(`ws://${location.hostname}:${WS_PORT}`)
+      // dev: talk to the ws server directly; prod: same origin at /ws so the
+      // reverse proxy can terminate tls (wss) and forward to :3001
+      const url = import.meta.env.DEV
+        ? `ws://${location.hostname}:${WS_PORT}`
+        : `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`
+      const ws = new WebSocket(url)
       wsRef.current = ws
       ws.onopen = () => {
         setConnected(true)

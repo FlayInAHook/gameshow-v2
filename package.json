@@ -6,6 +6,8 @@
     "dev": "vite dev --port 3000",
     "dev:ws": "bun --watch server/ws.ts",
     "build": "vite build",
+    "start": "bun dist/server/server.js",
+    "start:ws": "bun server/ws.ts",
     "preview": "vite preview",
     "test": "vitest run",
     "lint": "eslint",
