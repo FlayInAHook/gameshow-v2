@@ -35,6 +35,7 @@ function drawObscured(
   img: HTMLImageElement,
   filters: Array<RevealFilter>,
   progress: number,
+  zoomAt: { x: number; y: number },
 ) {
   const o = 1 - Math.min(1, Math.max(0, progress)) // obscure amount
   const W = img.naturalWidth
@@ -47,20 +48,24 @@ function drawObscured(
   work.height = H
   const wctx = work.getContext("2d")!
 
-  // zoom: crop a shrinking centered window; blur: canvas filter
-  const z = filters.includes("zoom") ? 1 + o * 9 : 1
+  // zoom: crop a shrinking window around the focal point; blur: canvas filter.
+  // both ramp geometrically so the obscured end stays strong deep into the reveal
+  const z = filters.includes("zoom") ? 30 ** o : 1
   const sw = W / z
   const sh = H / z
-  if (filters.includes("blur") && o > 0)
-    wctx.filter = `blur(${Math.round(o * W * 0.03)}px)`
-  wctx.drawImage(img, (W - sw) / 2, (H - sh) / 2, sw, sh, 0, 0, W, H)
+  const sx = Math.min(Math.max(zoomAt.x * W - sw / 2, 0), W - sw)
+  const sy = Math.min(Math.max(zoomAt.y * H - sh / 2, 0), H - sh)
+  // overdraw by the blur radius so the blur's transparent falloff lands
+  // outside the canvas instead of fading the edges out
+  const r = filters.includes("blur") && o > 0 ? Math.round(o * o * W * 0.12) : 0
+  if (r) wctx.filter = `blur(${r}px)`
+  wctx.drawImage(img, sx, sy, sw, sh, -r, -r, W + 2 * r, H + 2 * r)
   wctx.filter = "none"
 
   if (filters.includes("pixelate") && o > 0) {
-    const f = Math.max(0.015, 1 - o * 0.985)
     const small = document.createElement("canvas")
-    small.width = Math.max(1, Math.round(W * f))
-    small.height = Math.max(1, Math.round(H * f))
+    small.width = Math.max(1, Math.round(W ** (1 - o) * 3 ** o))
+    small.height = Math.max(1, Math.round(small.width * (H / W)))
     small.getContext("2d")!.drawImage(work, 0, 0, small.width, small.height)
     wctx.imageSmoothingEnabled = false
     wctx.drawImage(small, 0, 0, small.width, small.height, 0, 0, W, H)
@@ -106,30 +111,33 @@ export function RevealImage({
   src,
   filters,
   progress,
+  zoom,
   className,
 }: {
   src: string
   filters: Array<RevealFilter>
   progress: number
+  zoom?: { x: number; y: number }
   className?: string
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const imgRef = useRef<HTMLImageElement | null>(null)
+  const at = zoom ?? { x: 0.5, y: 0.5 }
 
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     if (imgRef.current?.src === src && imgRef.current.complete) {
-      drawObscured(canvas, imgRef.current, filters, progress)
+      drawObscured(canvas, imgRef.current, filters, progress, at)
       return
     }
     const img = new Image()
     img.onload = () => {
       imgRef.current = img
-      drawObscured(canvas, img, filters, progress)
+      drawObscured(canvas, img, filters, progress, at)
     }
     img.src = src
-  }, [src, filters, progress])
+  }, [src, filters, progress, at.x, at.y])
 
   return <canvas ref={canvasRef} className={cn("max-w-full", className)} />
 }

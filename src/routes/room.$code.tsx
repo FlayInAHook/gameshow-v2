@@ -558,6 +558,7 @@ function ActionsPanel({
                 src={q.image}
                 filters={q.filters}
                 progress={state.reveal}
+                zoom={q.zoom}
                 className="max-h-40 self-start rounded-lg"
               />
               <div className="flex flex-wrap items-center gap-2">
@@ -796,6 +797,7 @@ function PlayerView({
                 src={q.image}
                 filters={q.filters}
                 progress={state.revealed ? 1 : state.reveal}
+                zoom={q.zoom}
                 className="max-h-[45svh] rounded-lg"
               />
             ) : (

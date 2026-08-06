@@ -15,6 +15,8 @@ export type Question =
       type: "reveal"
       answer?: string
       filters: Array<RevealFilter>
+      // zoom focal point, 0..1 of the image; unset = centered
+      zoom?: { x: number; y: number }
       // seconds for the automatic reveal; unset = host steps manually
       revealSeconds?: number
     })

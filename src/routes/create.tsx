@@ -343,7 +343,12 @@ function CreatePage() {
                         />
                       </div>
                       {q.image && q.filters.length > 0 && (
-                        <RevealPreview image={q.image} filters={q.filters} />
+                        <RevealPreview
+                          image={q.image}
+                          filters={q.filters}
+                          zoom={q.zoom ?? { x: 0.5, y: 0.5 }}
+                          onZoom={(zoom) => updateQuestion(q.id, { zoom })}
+                        />
                       )}
                     </>
                   )}
@@ -380,9 +385,13 @@ function CreatePage() {
 function RevealPreview({
   image,
   filters,
+  zoom,
+  onZoom,
 }: {
   image: string
   filters: Array<RevealFilter>
+  zoom: { x: number; y: number }
+  onZoom: (z: { x: number; y: number }) => void
 }) {
   const [p, setP] = useState(0.25)
   return (
@@ -392,8 +401,32 @@ function RevealPreview({
         src={image}
         filters={filters}
         progress={p}
+        zoom={zoom}
         className="max-h-64 self-start rounded-lg"
       />
+      {filters.includes("zoom") && (
+        <>
+          <Label>Zoom start — click the image to move it</Label>
+          <div className="relative self-start">
+            <img
+              src={image}
+              alt=""
+              className="max-h-40 cursor-crosshair rounded-lg"
+              onClick={(e) => {
+                const r = e.currentTarget.getBoundingClientRect()
+                onZoom({
+                  x: (e.clientX - r.left) / r.width,
+                  y: (e.clientY - r.top) / r.height,
+                })
+              }}
+            />
+            <span
+              className="pointer-events-none absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-red-500"
+              style={{ left: `${zoom.x * 100}%`, top: `${zoom.y * 100}%` }}
+            />
+          </div>
+        </>
+      )}
       <input
         type="range"
         min={0}
