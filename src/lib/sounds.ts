@@ -34,8 +34,10 @@ function tone(
 export const sounds: Record<SoundName, () => void> = {
   buzzer: () => {
     initAudio()
-    tone(233, 0, 0.5, "sawtooth", 0.15)
-    tone(220, 0, 0.5, "sawtooth", 0.15)
+    // detuned pair — the ~8Hz beat still reads as a buzzer, but triangle's
+    // harmonics fall off as 1/n² so it loses sawtooth's ear-piercing top end
+    tone(165, 0, 0.3, "triangle", 0.2)
+    tone(157, 0, 0.3, "triangle", 0.2)
   },
   correct: () => {
     initAudio()
@@ -45,8 +47,8 @@ export const sounds: Record<SoundName, () => void> = {
   },
   wrong: () => {
     initAudio()
-    tone(196, 0, 0.25, "square", 0.12)
-    tone(147, 0.25, 0.45, "square", 0.12)
+    tone(165, 0, 0.16, "triangle", 0.18)
+    tone(123, 0.16, 0.3, "triangle", 0.18)
   },
   tada: () => {
     initAudio()

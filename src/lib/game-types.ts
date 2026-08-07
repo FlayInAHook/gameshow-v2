@@ -62,6 +62,7 @@ export type SoundName = "buzzer" | "correct" | "wrong" | "tada"
 export type HostAction =
   | { kind: "question"; index: number | null }
   | { kind: "close" }
+  | { kind: "open" }
   | { kind: "reset" }
   | { kind: "points"; playerId: string; delta: number }
   | { kind: "rename"; playerId: string; name: string }
@@ -96,3 +97,6 @@ export type ServerMsg =
   | { type: "error"; message: string }
 
 export const WS_PORT = 3168
+
+// keeps one pasted wall of text from blowing up the host's answer list
+export const MAX_ANSWER = 200

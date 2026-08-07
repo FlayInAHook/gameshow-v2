@@ -42,6 +42,7 @@ import {
 } from "@/lib/store"
 import { useRoom } from "@/lib/use-room"
 import { cn } from "@/lib/utils"
+import { MAX_ANSWER } from "@/lib/game-types"
 import type {
   ClientMsg,
   HostAction,
@@ -621,20 +622,24 @@ function ActionsPanel({
                 return (
                   <div
                     key={pid}
-                    className="flex items-center gap-2 rounded-lg border p-2 text-base"
+                    className="flex items-start gap-2 rounded-lg border p-2 text-base"
                   >
-                    <span className="min-w-0 flex-1 truncate font-medium">
-                      {playerName(pid)}
-                    </span>
-                    <span
-                      className={cn(
-                        "truncate",
-                        state.revealed && mcCorrect === true && "text-green-600",
-                        state.revealed && mcCorrect === false && "text-red-600",
-                      )}
-                    >
-                      {q.type === "mc" ? q.options[Number(value)] : value}
-                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-semibold">
+                        {playerName(pid)}
+                      </div>
+                      {/* quoted behind a rule so the answer can't be mistaken
+                          for the name once it wraps onto its own lines */}
+                      <div
+                        className={cn(
+                          "mt-1 border-l-2 border-muted-foreground/40 pl-2 text-muted-foreground wrap-anywhere",
+                          state.revealed && mcCorrect === true && "text-green-600",
+                          state.revealed && mcCorrect === false && "text-red-600",
+                        )}
+                      >
+                        {q.type === "mc" ? q.options[Number(value)] : value}
+                      </div>
+                    </div>
                     <AwardButtons onAward={(ok) => award(pid, ok)} />
                   </div>
                 )
@@ -648,7 +653,7 @@ function ActionsPanel({
                 Close round
               </Button>
             ) : (
-              <Badge>Round closed</Badge>
+              <Button onClick={() => act({ kind: "open" })}>Open round</Button>
             )}
             <Button variant="outline" onClick={() => act({ kind: "reset" })}>
               <RotateCcw /> Reset round
@@ -887,6 +892,7 @@ function PlayerView({
               <Input
                 placeholder="Your answer"
                 value={freeText}
+                maxLength={MAX_ANSWER}
                 disabled={state.locked}
                 onChange={(e) => setFreeText(e.target.value)}
               />

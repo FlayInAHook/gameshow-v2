@@ -7,7 +7,7 @@ import type {
   ServerMsg,
   Settings,
 } from "../src/lib/game-types"
-import { WS_PORT } from "../src/lib/game-types"
+import { MAX_ANSWER, WS_PORT } from "../src/lib/game-types"
 
 type Room = {
   code: string
@@ -170,7 +170,7 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
 
   if (msg.type === "answer") {
     if (!room.players.has(playerId) || room.locked) return
-    room.answers[playerId] = msg.value
+    room.answers[playerId] = msg.value.slice(0, MAX_ANSWER)
     broadcast(room)
     return
   }
@@ -196,6 +196,11 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         room.revealed = true
         room.reveal = 1
         stopReveal(room)
+        break
+      // un-close without losing the round: buzzes, answers and reveal stay put
+      case "open":
+        room.locked = false
+        room.revealed = false
         break
       case "reset":
         room.locked = false
