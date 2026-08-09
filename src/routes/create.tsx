@@ -174,16 +174,19 @@ function CreatePage() {
 
       <div className="flex gap-6">
         {/* collection list */}
-        <div className="flex w-56 shrink-0 flex-col gap-2">
+        <div className="flex w-72 shrink-0 flex-col gap-2">
           {collections.map((c) => (
             <div key={c.id} className="flex items-center gap-1">
+              {/* min-w-0: the button is whitespace-nowrap, so its automatic
+                  min-width is the full name — the span never truncated and the
+                  text spilled over the icon buttons instead */}
               <Button
                 variant={c.id === selectedId ? "secondary" : "ghost"}
-                className="flex-1 justify-start"
+                className="min-w-0 flex-1 justify-start"
                 onClick={() => setSelectedId(c.id)}
               >
                 <span className="truncate">{c.name}</span>
-                <span className="ml-auto text-xs text-muted-foreground">
+                <span className="ml-auto shrink-0 text-xs text-muted-foreground">
                   {c.questions.length}
                 </span>
               </Button>
@@ -256,7 +259,21 @@ function CreatePage() {
             </div>
 
             {selected.questions.map((q, i) => (
-              <Card key={q.id}>
+              <Card
+                key={q.id}
+                // paste anywhere in the card (the event bubbles up from
+                // whichever field has focus) to drop a screenshot straight in
+                onPaste={(e) => {
+                  const f = [...e.clipboardData.files].find((x) =>
+                    x.type.startsWith("image/"),
+                  )
+                  if (!f) return
+                  e.preventDefault()
+                  void fileToDataUrl(f).then((image) =>
+                    updateQuestion(q.id, { image }),
+                  )
+                }}
+              >
                 <CardContent className="flex flex-col gap-3 pt-4">
                   <div className="flex items-center gap-2">
                     <Badge variant="secondary">{typeLabels[q.type]}</Badge>
@@ -303,7 +320,9 @@ function CreatePage() {
                     </div>
                   ) : (
                     <div>
-                      <Label htmlFor={`img-${q.id}`}>Image (optional)</Label>
+                      <Label htmlFor={`img-${q.id}`}>
+                        Image (optional — or paste one into this card)
+                      </Label>
                       <Input
                         id={`img-${q.id}`}
                         type="file"
