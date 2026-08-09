@@ -36,6 +36,9 @@ export type Settings = {
   buzzHidesQuestion: boolean
   // seconds on the host-started countdown for mc rounds; 0 = no timer
   mcSeconds: number
+  // order buzzes by the reaction time each player's own device reports, which
+  // cancels latency in both directions but takes the client at its word
+  friendsBuzz: boolean
 }
 
 export type PlayerInfo = {
@@ -47,6 +50,9 @@ export type PlayerInfo = {
   // host judgements, for the end-of-game leaderboard
   correct: number
   wrong: number
+  // server clock at their last join; a join after the round started means their
+  // reaction clock started late, so friends-mode timing can't trust it
+  joinedAt: number
 }
 
 // questions travel in a separate "questions" message so images (data-urls)
@@ -67,6 +73,9 @@ export type RoomState = {
   reveal: number
   // seconds left on the round timer, counted down by the server; null = no timer
   timerLeft: number | null
+  // server clock when this round started; clients restart their reaction timer
+  // whenever it changes
+  questionAt: number
   // effective (rtt-compensated) press times, epoch ms, sorted ascending
   buzzes: { playerId: string; time: number }[]
   answers: Record<string, string>
@@ -112,7 +121,9 @@ export type ClientMsg =
       questions: Question[]
     }
   | { type: "join"; code: string; playerId: string; name: string }
-  | { type: "buzz" }
+  // reaction is ms from the client receiving the round to pressing; the server
+  // only uses it in friends mode
+  | { type: "buzz"; reaction?: number }
   | { type: "answer"; value: string }
   | { type: "pong"; t: number }
   | { type: "host"; action: HostAction }

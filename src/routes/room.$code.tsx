@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Link, createFileRoute } from "@tanstack/react-router"
 import {
   BellOff,
@@ -484,6 +484,22 @@ function SettingsPanel({
         />
         Buzzing hides the question from players
       </label>
+      <label
+        className="flex items-center gap-2 text-sm"
+        title="Orders buzzes by each player's own reaction time, cancelling latency both ways. Trusts the player's device, so only for friendly games"
+      >
+        <input
+          type="checkbox"
+          checked={state.settings.friendsBuzz ?? false}
+          onChange={(e) =>
+            act({
+              kind: "settings",
+              settings: { friendsBuzz: e.target.checked },
+            })
+          }
+        />
+        Buzzing calculations: friends mode
+      </label>
     </Panel>
   )
 }
@@ -680,7 +696,11 @@ function ActionsPanel({
 
           {state.buzzes.length > 0 && (
             <div className="flex flex-col gap-2">
-              <Label>Buzz order (ping-adjusted)</Label>
+              <Label>
+                Buzz order (
+                {state.settings.friendsBuzz ? "reaction time" : "ping-adjusted"}
+                )
+              </Label>
               {state.buzzes.map((b, i) => (
                 <div
                   key={b.playerId}
@@ -864,6 +884,23 @@ function PlayerView({
     else if (timerLeft === 10 || timerLeft <= 5) sounds.tick()
   }, [timerLeft])
 
+  // reaction clock: restarts whenever the server starts a round, measured with
+  // performance.now() so a wall-clock adjustment can't skew it
+  const roundAt = state.questionAt
+  const shownAt = useRef(0)
+  useEffect(() => {
+    shownAt.current = performance.now()
+  }, [roundAt])
+
+  const buzz = useCallback(
+    () =>
+      send({
+        type: "buzz",
+        reaction: Math.round(performance.now() - shownAt.current),
+      }),
+    [send],
+  )
+
   // spacebar buzzes on buzz questions
   const canBuzz = buzzable && !state.locked && myBuzzIndex < 0
   useEffect(() => {
@@ -872,11 +909,11 @@ function PlayerView({
       if (e.code !== "Space" || e.repeat) return
       if (e.target instanceof HTMLInputElement) return
       e.preventDefault()
-      send({ type: "buzz" })
+      buzz()
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [canBuzz, send])
+  }, [canBuzz, buzz])
 
   return (
     <main className="mx-auto flex min-h-svh max-w-xl flex-col gap-6 p-6">
@@ -975,7 +1012,7 @@ function PlayerView({
             <>
               <button
                 disabled={state.locked || myBuzzIndex >= 0}
-                onClick={() => send({ type: "buzz" })}
+                onClick={buzz}
                 className={cn(
                   "rounded-full bg-red-600 font-black text-white shadow-lg transition-transform select-none",
                   q.type === "reveal"

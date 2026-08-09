@@ -26,6 +26,7 @@ type Room = {
   revealPaused?: boolean
   timerLeft: number | null
   roundTimer?: ReturnType<typeof setInterval>
+  questionAt: number
   buzzes: { playerId: string; time: number }[]
   answers: Record<string, string>
   settings: Settings
@@ -53,6 +54,7 @@ function stateOf(room: Room): RoomState {
     revealed: room.revealed,
     reveal: room.reveal,
     timerLeft: room.timerLeft,
+    questionAt: room.questionAt,
     buzzes: room.buzzes,
     answers: room.answers,
     settings: room.settings,
@@ -134,6 +136,7 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         revealed: false,
         reveal: 0,
         timerLeft: null,
+        questionAt: Date.now(),
         buzzes: [],
         answers: {},
         settings: {
@@ -143,6 +146,7 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
           revealStepPercent: 8,
           buzzHidesQuestion: false,
           mcSeconds: 0,
+          friendsBuzz: true,
         },
         players: new Map(),
       }
@@ -170,8 +174,11 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
       room.hostConnected = true
     } else {
       const existing = room.players.get(msg.playerId)
+      // a rejoin remounts their page, which restarts the reaction clock — so
+      // stamp it here too and let the buzz handler distrust it for this round
       if (existing) {
         existing.connected = true
+        existing.joinedAt = Date.now()
       } else {
         room.players.set(msg.playerId, {
           id: msg.playerId,
@@ -181,6 +188,7 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
           rtt: 0,
           correct: 0,
           wrong: 0,
+          joinedAt: Date.now(),
         })
       }
     }
@@ -208,8 +216,24 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
     const player = room.players.get(playerId)
     if (!player || room.locked || room.phase !== "playing") return
     if (room.buzzes.some((b) => b.playerId === playerId)) return
-    // ping mitigation: credit the player half their roundtrip
-    room.buzzes.push({ playerId, time: Date.now() - player.rtt / 2 })
+    // friends mode: the client times from receiving the round to pressing, so
+    // both the question's trip out and the buzz's trip back cancel out. we take
+    // that on trust — hence "friends" — but never a negative head start.
+    // otherwise fall back to crediting the player half their roundtrip
+    const reaction = msg.reaction
+    const trusted =
+      room.settings.friendsBuzz &&
+      typeof reaction === "number" &&
+      Number.isFinite(reaction) &&
+      reaction >= 0 &&
+      // joined mid-round: their clock started late, so it would read as fast
+      player.joinedAt <= room.questionAt
+    room.buzzes.push({
+      playerId,
+      time: trusted
+        ? room.questionAt + (reaction as number)
+        : Date.now() - player.rtt / 2,
+    })
     room.buzzes.sort((a, b) => a.time - b.time)
     // freeze an image reveal while someone holds the buzzer, so the picture
     // doesn't keep uncovering itself while the host judges
@@ -242,6 +266,7 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         room.buzzes = []
         room.answers = {}
         room.reveal = 0
+        room.questionAt = Date.now()
         stopReveal(room)
         stopTimer(room)
         break
@@ -259,6 +284,8 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         room.buzzes = []
         room.answers = {}
         room.reveal = 0
+        // restarts everyone's reaction clock along with the round
+        room.questionAt = Date.now()
         stopReveal(room)
         stopTimer(room)
         break
