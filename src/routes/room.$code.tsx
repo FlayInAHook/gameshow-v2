@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { Link, createFileRoute } from "@tanstack/react-router"
 import {
+  BellOff,
   Check,
   Copy,
   Pencil,
@@ -442,6 +443,15 @@ function SettingsPanel({
         defaultValue={state.settings.pointsWrongOthers}
         onChange={(e) => numSetting("pointsWrongOthers", e.target.value)}
       />
+      <Label htmlFor="rstep">Reveal step size (%)</Label>
+      <Input
+        id="rstep"
+        type="number"
+        min={1}
+        max={100}
+        defaultValue={state.settings.revealStepPercent}
+        onChange={(e) => numSetting("revealStepPercent", e.target.value)}
+      />
     </Panel>
   )
 }
@@ -537,6 +547,8 @@ function ActionsPanel({
       : null
   const playerName = (id: string) =>
     state.players.find((p) => p.id === id)?.name ?? "?"
+  // ?? keeps a room created before this setting existed from stepping to NaN
+  const step = state.settings.revealStepPercent ?? 8
   const award = (playerId: string, correct: boolean) => {
     act({
       kind: "points",
@@ -589,10 +601,10 @@ function ActionsPanel({
                 <Button
                   variant="outline"
                   onClick={() =>
-                    act({ kind: "reveal", to: state.reveal + 0.125 })
+                    act({ kind: "reveal", to: state.reveal + step / 100 })
                   }
                 >
-                  Step reveal
+                  Step reveal (+{step}%)
                 </Button>
                 <Button
                   variant="outline"
@@ -672,6 +684,15 @@ function ActionsPanel({
               </Button>
             ) : (
               <Button onClick={() => act({ kind: "open" })}>Open round</Button>
+            )}
+            {state.buzzes.length > 0 && (
+              <Button
+                variant="outline"
+                title="Drop the buzzes and resume an auto-reveal, keeping the current progress"
+                onClick={() => act({ kind: "clearBuzz" })}
+              >
+                <BellOff /> Clear buzzer
+              </Button>
             )}
             <Button variant="outline" onClick={() => act({ kind: "reset" })}>
               <RotateCcw /> Reset round

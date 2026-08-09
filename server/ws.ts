@@ -22,6 +22,8 @@ type Room = {
   revealed: boolean
   reveal: number
   revealTimer?: ReturnType<typeof setInterval>
+  // a buzz froze the auto-reveal; clearing the buzzer resumes it
+  revealPaused?: boolean
   buzzes: { playerId: string; time: number }[]
   answers: Record<string, string>
   settings: Settings
@@ -64,6 +66,24 @@ function questionsMsg(room: Room): string {
 function stopReveal(room: Room) {
   if (room.revealTimer) clearInterval(room.revealTimer)
   room.revealTimer = undefined
+  room.revealPaused = false
+}
+
+// resumes from wherever room.reveal already is — the caller zeroes it to restart
+function startReveal(room: Room) {
+  const q =
+    room.currentIndex !== null ? room.questions[room.currentIndex] : undefined
+  stopReveal(room)
+  if (q?.type !== "reveal" || !q.revealSeconds) return
+  // 20 small state broadcasts over the configured duration
+  room.revealTimer = setInterval(
+    () => {
+      room.reveal = Math.min(1, room.reveal + 0.05)
+      if (room.reveal >= 1) stopReveal(room)
+      broadcast(room)
+    },
+    (q.revealSeconds * 1000) / 20,
+  )
 }
 
 function broadcast(room: Room) {
@@ -98,7 +118,12 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         reveal: 0,
         buzzes: [],
         answers: {},
-        settings: { pointsCorrect: 10, pointsWrong: 0, pointsWrongOthers: 0 },
+        settings: {
+          pointsCorrect: 10,
+          pointsWrong: 0,
+          pointsWrongOthers: 0,
+          revealStepPercent: 8,
+        },
         players: new Map(),
       }
       rooms.set(msg.code, room)
@@ -166,6 +191,12 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
     // ping mitigation: credit the player half their roundtrip
     room.buzzes.push({ playerId, time: Date.now() - player.rtt / 2 })
     room.buzzes.sort((a, b) => a.time - b.time)
+    // freeze an image reveal while someone holds the buzzer, so the picture
+    // doesn't keep uncovering itself while the host judges
+    if (room.revealTimer) {
+      stopReveal(room)
+      room.revealPaused = true
+    }
     broadcast(room)
     return
   }
@@ -216,24 +247,16 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         room.reveal = Math.min(1, Math.max(0, a.to))
         if (room.reveal >= 1) stopReveal(room)
         break
-      case "revealAuto": {
-        const q =
-          room.currentIndex !== null
-            ? room.questions[room.currentIndex]
-            : undefined
-        if (q?.type !== "reveal" || !q.revealSeconds) break
-        stopReveal(room)
-        // 20 small state broadcasts over the configured duration
-        room.revealTimer = setInterval(
-          () => {
-            room.reveal = Math.min(1, room.reveal + 0.05)
-            if (room.reveal >= 1) stopReveal(room)
-            broadcast(room)
-          },
-          (q.revealSeconds * 1000) / 20,
-        )
+      case "revealAuto":
+        // start over: otherwise pressing this at a full reveal (after "Show
+        // full", or a close/open round, which pin it to 1) does nothing at all
+        room.reveal = 0
+        startReveal(room)
         break
-      }
+      case "clearBuzz":
+        room.buzzes = []
+        if (room.revealPaused) startReveal(room)
+        break
       case "points": {
         const p = room.players.get(a.playerId)
         if (p) {

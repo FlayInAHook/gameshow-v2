@@ -30,6 +30,8 @@ export type Settings = {
   pointsWrong: number
   // given to every *other* player when someone answers wrong; 0 = off
   pointsWrongOthers: number
+  // how far one "Step reveal" press uncovers, in percent
+  revealStepPercent: number
 }
 
 export type PlayerInfo = {
@@ -81,6 +83,8 @@ export type HostAction =
   | { kind: "sound"; name: SoundName }
   | { kind: "reveal"; to: number }
   | { kind: "revealAuto" }
+  // drops the buzzes without touching reveal progress, unlike "reset"
+  | { kind: "clearBuzz" }
   | { kind: "end" }
   | { kind: "reopen" }
 
