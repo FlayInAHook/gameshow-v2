@@ -240,17 +240,24 @@ function HostView({
 
 function Panel({
   title,
+  footer,
   children,
 }: {
   title: string
+  footer?: React.ReactNode
   children: React.ReactNode
 }) {
   return (
-    <div className="flex h-full flex-col overflow-auto p-3">
-      <h2 className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+    <div className="flex h-full flex-col p-3">
+      <h2 className="mb-2 shrink-0 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
         {title}
       </h2>
-      <div className="flex flex-1 flex-col gap-2">{children}</div>
+      {/* min-h-0 lets this shrink inside the flex column instead of pushing
+          the footer off the bottom — only this middle strip scrolls */}
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto">
+        {children}
+      </div>
+      {footer && <div className="mt-2 shrink-0">{footer}</div>}
     </div>
   )
 }
@@ -473,7 +480,21 @@ function QuestionsPanel({
   act: (a: HostAction) => void
 }) {
   return (
-    <Panel title={`Questions — ${state.collectionName}`}>
+    <Panel
+      title={`Questions — ${state.collectionName}`}
+      footer={
+        state.currentIndex !== null && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={() => act({ kind: "question", index: null })}
+          >
+            Clear current question
+          </Button>
+        )
+      }
+    >
       {questions.map((q, i) => {
         const played = state.played.includes(i) && i !== state.currentIndex
         return (
@@ -500,15 +521,6 @@ function QuestionsPanel({
           </button>
         )
       })}
-      {state.currentIndex !== null && (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => act({ kind: "question", index: null })}
-        >
-          Clear current question
-        </Button>
-      )}
     </Panel>
   )
 }
@@ -864,7 +876,9 @@ function PlayerView({
                     variant={mine ? "default" : "outline"}
                     disabled={state.locked}
                     className={cn(
-                      "h-16 text-lg",
+                      // the base button is nowrap/fixed-height, so a long
+                      // option ran straight out the side
+                      "h-auto min-h-16 min-w-0 px-3 py-2 text-lg whitespace-normal wrap-anywhere",
                       showCorrect && "border-2 border-green-500",
                       state.revealed &&
                         mine &&
