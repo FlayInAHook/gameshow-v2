@@ -283,12 +283,18 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
       case "settings":
         Object.assign(room.settings, a.settings)
         break
-      case "sound":
-        server.publish(
-          room.code,
-          JSON.stringify({ type: "sound", name: a.name } satisfies ServerMsg),
-        )
+      case "sound": {
+        const sound: ServerMsg = { type: "sound", name: a.name }
+        if (a.playerId) {
+          // the host machine usually drives the room speakers, so it hears
+          // every verdict — the other players only hear their own
+          for (const id of [a.playerId, room.hostId]) {
+            const target = sockets.get(id)
+            if (target) send(target, sound)
+          }
+        } else server.publish(room.code, JSON.stringify(sound))
         return
+      }
       case "end":
         room.phase = "ended"
         stopReveal(room)

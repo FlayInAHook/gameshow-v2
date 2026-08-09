@@ -80,7 +80,9 @@ export type HostAction =
   | { kind: "rename"; playerId: string; name: string }
   | { kind: "kick"; playerId: string }
   | { kind: "settings"; settings: Partial<Settings> }
-  | { kind: "sound"; name: SoundName }
+  // playerId narrows the sound to that player (and the host, who usually drives
+  // the room speakers); omit it to play for everyone
+  | { kind: "sound"; name: SoundName; playerId?: string }
   | { kind: "reveal"; to: number }
   | { kind: "revealAuto" }
   // drops the buzzes without touching reveal progress, unlike "reset"

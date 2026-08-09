@@ -4,6 +4,7 @@ import {
   BellOff,
   Check,
   Copy,
+  Gavel,
   Pencil,
   Play,
   RotateCcw,
@@ -576,7 +577,13 @@ function ActionsPanel({
       for (const p of state.players)
         if (p.id !== playerId)
           act({ kind: "points", playerId: p.id, delta: others })
-    act({ kind: "sound", name: correct ? "correct" : "wrong" })
+    // a buzz verdict is a shared moment, so the room hears it; in mc/free the
+    // host judges everyone in turn and only your own result is yours to hear
+    act({
+      kind: "sound",
+      name: correct ? "correct" : "wrong",
+      playerId: q?.type === "buzz" ? undefined : playerId,
+    })
   }
 
   return (
@@ -712,20 +719,15 @@ function ActionsPanel({
             {q.type === "mc" && (
               <Button
                 variant="outline"
-                title="Give points to everyone whose answer is correct"
-                onClick={() =>
-                  Object.entries(state.answers).forEach(([pid, v]) => {
-                    if (Number(v) === q.correct)
-                      act({
-                        kind: "points",
-                        playerId: pid,
-                        delta: state.settings.pointsCorrect,
-                        correct: true,
-                      })
-                  })
-                }
+                title="Score every answer and close the round so players see the correct option"
+                onClick={() => {
+                  Object.entries(state.answers).forEach(([pid, v]) =>
+                    award(pid, Number(v) === q.correct),
+                  )
+                  act({ kind: "close" })
+                }}
               >
-                Award all correct
+                <Gavel /> Auto award
               </Button>
             )}
           </div>
@@ -879,7 +881,11 @@ function PlayerView({
                       // the base button is nowrap/fixed-height, so a long
                       // option ran straight out the side
                       "h-auto min-h-16 min-w-0 px-3 py-2 text-lg whitespace-normal wrap-anywhere",
-                      showCorrect && "border-2 border-green-500",
+                      // the dark: duplicates are load-bearing: the outline
+                      // variant ships dark:border-input/dark:bg-input, which
+                      // outranks a plain border-green-500 in dark mode
+                      showCorrect &&
+                        "border-2 border-green-500 bg-green-500/15 dark:border-green-500 dark:bg-green-500/15",
                       state.revealed &&
                         mine &&
                         i !== q.correct &&
