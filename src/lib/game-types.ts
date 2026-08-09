@@ -78,7 +78,8 @@ export type RoomState = {
   questionAt: number
   // effective (rtt-compensated) press times, epoch ms, sorted ascending
   buzzes: { playerId: string; time: number }[]
-  answers: Record<string, string>
+  // a player who hasn't answered simply has no key here
+  answers: Record<string, string | undefined>
   settings: Settings
 }
 
@@ -121,6 +122,8 @@ export type ClientMsg =
       questions: Question[]
     }
   | { type: "join"; code: string; playerId: string; name: string }
+  // read-only viewer; code is the room's spectate code, not its join code
+  | { type: "spectate"; code: string }
   // reaction is ms from the client receiving the round to pressing; the server
   // only uses it in friends mode
   | { type: "buzz"; reaction?: number }
@@ -131,6 +134,9 @@ export type ClientMsg =
 export type ServerMsg =
   | { type: "state"; state: RoomState }
   | { type: "questions"; questions: Question[] }
+  // host only, never part of RoomState — a player who could read it off the
+  // broadcast could open the spectate view and see everyone else's answers
+  | { type: "spectateCode"; code: string }
   | { type: "ping"; t: number }
   | { type: "sound"; name: SoundName }
   | { type: "kicked" }

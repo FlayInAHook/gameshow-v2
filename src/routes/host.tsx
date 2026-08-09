@@ -15,7 +15,7 @@ function HostPage() {
 
   function host(collectionId: string) {
     initAudio() // user gesture — unlock audio before entering the room
-    const code = Array.from({ length: 4 }, () =>
+    const code = Array.from({ length: 6 }, () =>
       String.fromCharCode(65 + Math.floor(Math.random() * 26)),
     ).join("")
     setHostRoom(code, collectionId)

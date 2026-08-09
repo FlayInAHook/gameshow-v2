@@ -11,6 +11,9 @@ import { MAX_ANSWER, WS_PORT } from "../src/lib/game-types"
 
 type Room = {
   code: string
+  // separate secret code for the spectate link — players know the join code,
+  // and the spectate view shows every answer as it is typed
+  spectateCode: string
   hostId: string
   hostConnected: boolean
   collectionName: string
@@ -38,7 +41,20 @@ type Ws = ServerWebSocket<WsData>
 
 // ponytail: everything in memory — rooms die on server restart, host just re-hosts
 const rooms = new Map<string, Room>()
+const spectateCodes = new Map<string, string>() // spectate code -> room code
 const sockets = new Map<string, Ws>()
+
+// 26^6 ≈ 300M, and both namespaces are checked so a spectate code can never
+// collide with a join code someone already has
+function newSpectateCode(): string {
+  let code: string
+  do {
+    code = Array.from({ length: 6 }, () =>
+      String.fromCharCode(65 + Math.floor(Math.random() * 26)),
+    ).join("")
+  } while (rooms.has(code) || spectateCodes.has(code))
+  return code
+}
 
 function stateOf(room: Room): RoomState {
   return {
@@ -125,6 +141,7 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
     if (!room) {
       room = {
         code: msg.code,
+        spectateCode: newSpectateCode(),
         hostId: msg.playerId,
         hostConnected: true,
         collectionName: msg.collectionName,
@@ -151,6 +168,7 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         players: new Map(),
       }
       rooms.set(msg.code, room)
+      spectateCodes.set(room.spectateCode, msg.code)
     }
     room.hostConnected = true
     room.collectionName = msg.collectionName
@@ -159,8 +177,22 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
     sockets.set(msg.playerId, ws)
     ws.subscribe(msg.code)
     send(ws, { type: "state", state: stateOf(room) })
+    send(ws, { type: "spectateCode", code: room.spectateCode })
     broadcast(room)
     server.publish(room.code, questionsMsg(room))
+    return
+  }
+
+  if (msg.type === "spectate") {
+    const roomCode = spectateCodes.get(msg.code)
+    const room = roomCode ? rooms.get(roomCode) : undefined
+    if (!room) return send(ws, { type: "error", message: "Room not found" })
+    // no playerId in ws.data on purpose: spectators never enter room.players,
+    // and the `!playerId` guard below drops every other message they could send
+    ws.data = { code: room.code }
+    ws.subscribe(room.code)
+    send(ws, { type: "state", state: stateOf(room) })
+    ws.send(questionsMsg(room))
     return
   }
 
@@ -172,6 +204,7 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
     ws.subscribe(msg.code)
     if (msg.playerId === room.hostId) {
       room.hostConnected = true
+      send(ws, { type: "spectateCode", code: room.spectateCode })
     } else {
       const existing = room.players.get(msg.playerId)
       // a rejoin remounts their page, which restarts the reaction clock — so

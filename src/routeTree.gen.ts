@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as CreateRouteImport } from './routes/create'
 import { Route as HostRouteImport } from './routes/host'
 import { Route as RoomCodeRouteImport } from './routes/room.$code'
+import { Route as SpectateCodeRouteImport } from './routes/spectate.$code'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -34,18 +35,25 @@ const RoomCodeRoute = RoomCodeRouteImport.update({
   path: '/room/$code',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SpectateCodeRoute = SpectateCodeRouteImport.update({
+  id: '/spectate/$code',
+  path: '/spectate/$code',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/create': typeof CreateRoute
   '/host': typeof HostRoute
   '/room/$code': typeof RoomCodeRoute
+  '/spectate/$code': typeof SpectateCodeRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/create': typeof CreateRoute
   '/host': typeof HostRoute
   '/room/$code': typeof RoomCodeRoute
+  '/spectate/$code': typeof SpectateCodeRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,13 +61,14 @@ export interface FileRoutesById {
   '/create': typeof CreateRoute
   '/host': typeof HostRoute
   '/room/$code': typeof RoomCodeRoute
+  '/spectate/$code': typeof SpectateCodeRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/create' | '/host' | '/room/$code'
+  fullPaths: '/' | '/create' | '/host' | '/room/$code' | '/spectate/$code'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/create' | '/host' | '/room/$code'
-  id: '__root__' | '/' | '/create' | '/host' | '/room/$code'
+  to: '/' | '/create' | '/host' | '/room/$code' | '/spectate/$code'
+  id: '__root__' | '/' | '/create' | '/host' | '/room/$code' | '/spectate/$code'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -67,6 +76,7 @@ export interface RootRouteChildren {
   CreateRoute: typeof CreateRoute
   HostRoute: typeof HostRoute
   RoomCodeRoute: typeof RoomCodeRoute
+  SpectateCodeRoute: typeof SpectateCodeRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -99,6 +109,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RoomCodeRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/spectate/$code': {
+      id: '/spectate/$code'
+      path: '/spectate/$code'
+      fullPath: '/spectate/$code'
+      preLoaderRoute: typeof SpectateCodeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -107,6 +124,7 @@ const rootRouteChildren: RootRouteChildren = {
   CreateRoute: CreateRoute,
   HostRoute: HostRoute,
   RoomCodeRoute: RoomCodeRoute,
+  SpectateCodeRoute: SpectateCodeRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -6,6 +6,8 @@ import type { ClientMsg, Question, RoomState, ServerMsg } from "./game-types"
 export function useRoom(joinMsg: ClientMsg | null) {
   const [state, setState] = useState<RoomState | null>(null)
   const [questions, setQuestions] = useState<Array<Question>>([])
+  // only ever sent to the host
+  const [spectateCode, setSpectateCode] = useState<string | null>(null)
   const [connected, setConnected] = useState(false)
   const [kicked, setKicked] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -36,6 +38,7 @@ export function useRoom(joinMsg: ClientMsg | null) {
         const msg = JSON.parse(e.data) as ServerMsg
         if (msg.type === "state") setState(msg.state)
         else if (msg.type === "questions") setQuestions(msg.questions)
+        else if (msg.type === "spectateCode") setSpectateCode(msg.code)
         else if (msg.type === "ping")
           ws.send(JSON.stringify({ type: "pong", t: msg.t } satisfies ClientMsg))
         else if (msg.type === "sound") sounds[msg.name]()
@@ -65,5 +68,5 @@ export function useRoom(joinMsg: ClientMsg | null) {
     wsRef.current?.send(JSON.stringify(msg))
   }
 
-  return { state, questions, connected, kicked, error, send }
+  return { state, questions, spectateCode, connected, kicked, error, send }
 }

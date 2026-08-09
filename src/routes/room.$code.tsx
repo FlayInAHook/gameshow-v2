@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react"
 import { RevealImage } from "@/components/reveal-image"
+import { ConnectionDot, Leaderboard } from "@/components/scoreboard"
 import {
   HoverCard,
   HoverCardContent,
@@ -85,7 +86,8 @@ function RoomPage() {
         }
       : { type: "join" as const, code, playerId, name }
 
-  const { state, questions, connected, kicked, error, send } = useRoom(joinMsg)
+  const { state, questions, spectateCode, connected, kicked, error, send } =
+    useRoom(joinMsg)
   const isHost = state ? state.hostId === playerId : collection != null
 
   // play the buzzer locally for everyone when the first buzz of a round lands
@@ -168,6 +170,7 @@ function RoomPage() {
       questions={questions}
       act={hostAct}
       connected={connected}
+      spectateCode={spectateCode}
     />
   ) : (
     <PlayerView
@@ -188,18 +191,6 @@ function Center({ children }: { children: React.ReactNode }) {
   )
 }
 
-function ConnectionDot({ connected }: { connected: boolean }) {
-  return (
-    <span
-      className={cn(
-        "inline-block size-2 rounded-full",
-        connected ? "bg-green-500" : "animate-pulse bg-red-500",
-      )}
-      title={connected ? "Connected" : "Reconnecting…"}
-    />
-  )
-}
-
 /* ------------------------------- host view ------------------------------- */
 
 function HostView({
@@ -207,11 +198,13 @@ function HostView({
   questions,
   act,
   connected,
+  spectateCode,
 }: {
   state: RoomState
   questions: Array<Question>
   act: (a: HostAction) => void
   connected: boolean
+  spectateCode: string | null
 }) {
   return (
     <div className="h-svh">
@@ -223,7 +216,12 @@ function HostView({
             </ResizablePanel>
             <ResizableHandle withHandle />
             <ResizablePanel>
-              <SettingsPanel state={state} act={act} connected={connected} />
+              <SettingsPanel
+                state={state}
+                act={act}
+                connected={connected}
+                spectateCode={spectateCode}
+              />
             </ResizablePanel>
           </ResizablePanelGroup>
         </ResizablePanel>
@@ -393,14 +391,13 @@ function SettingsPanel({
   state,
   act,
   connected,
+  spectateCode,
 }: {
   state: RoomState
   act: (a: HostAction) => void
   connected: boolean
+  spectateCode: string | null
 }) {
-  const inviteUrl = `${location.origin}/room/${state.code}`
-  const [copied, setCopied] = useState(false)
-
   function numSetting(key: keyof RoomState["settings"], raw: string) {
     const n = Number(raw)
     if (Number.isFinite(n)) act({ kind: "settings", settings: { [key]: n } })
@@ -412,21 +409,13 @@ function SettingsPanel({
         <ConnectionDot connected={connected} />
         {connected ? "Connected" : "Reconnecting…"}
       </div>
-      <Label className="mt-2">Invite link</Label>
-      <div className="flex gap-1">
-        <Input readOnly value={inviteUrl} className="text-xs" />
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={() => {
-            void navigator.clipboard.writeText(inviteUrl)
-            setCopied(true)
-            setTimeout(() => setCopied(false), 1500)
-          }}
-        >
-          {copied ? <Check /> : <Copy />}
-        </Button>
-      </div>
+      <CopyRow label="Invite link" url={`${location.origin}/room/${state.code}`} />
+      {spectateCode && (
+        <CopyRow
+          label="Spectate link — shows every answer live, keep it off the players"
+          url={`${location.origin}/spectate/${spectateCode}`}
+        />
+      )}
       <Label className="mt-2" htmlFor="ptsc">
         Points for correct
       </Label>
@@ -501,6 +490,29 @@ function SettingsPanel({
         Buzzing calculations: friends mode
       </label>
     </Panel>
+  )
+}
+
+function CopyRow({ label, url }: { label: string; url: string }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <>
+      <Label className="mt-2">{label}</Label>
+      <div className="flex gap-1">
+        <Input readOnly value={url} className="text-xs" />
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => {
+            void navigator.clipboard.writeText(url)
+            setCopied(true)
+            setTimeout(() => setCopied(false), 1500)
+          }}
+        >
+          {copied ? <Check /> : <Copy />}
+        </Button>
+      </div>
+    </>
   )
 }
 
@@ -1089,71 +1101,3 @@ function PlayerView({
   )
 }
 
-/* ------------------------------ leaderboard ------------------------------ */
-
-function Leaderboard({
-  state,
-  onReopen,
-}: {
-  state: RoomState
-  onReopen?: () => void
-}) {
-  const ranked = [...state.players].sort((a, b) => b.points - a.points)
-  const medals = ["text-amber-400", "text-zinc-400", "text-amber-700"]
-
-  return (
-    <main className="flex min-h-svh flex-col items-center justify-center gap-6 p-6">
-      <h1 className="lb-row text-4xl font-black" style={{ animationDelay: "0s" }}>
-        🏆 Leaderboard
-      </h1>
-      <div className="flex w-full max-w-md flex-col gap-2">
-        {ranked.map((p, i) => (
-          <div
-            key={p.id}
-            className={cn(
-              "lb-row flex items-center gap-3 rounded-xl border p-4",
-              i === 0 && "border-amber-400 bg-amber-400/10",
-            )}
-            // reveal from last place up to the winner
-            style={{ animationDelay: `${0.3 + (ranked.length - 1 - i) * 0.4}s` }}
-          >
-            <span className={cn("w-8 text-2xl font-black", medals[i])}>
-              {i + 1}
-            </span>
-            <span
-              className={cn(
-                "min-w-0 flex-1 truncate text-lg font-medium",
-                i === 0 && "text-xl font-bold",
-              )}
-            >
-              {p.name}
-            </span>
-            <span
-              className="text-sm font-semibold text-green-600 tabular-nums"
-              title="Correct answers"
-            >
-              {p.correct}
-            </span>
-            <span
-              className="text-sm font-semibold text-red-600 tabular-nums"
-              title="Wrong answers"
-            >
-              {p.wrong}
-            </span>
-            <span className="w-12 text-right text-2xl font-bold tabular-nums">
-              {p.points}
-            </span>
-          </div>
-        ))}
-        {ranked.length === 0 && (
-          <p className="text-center text-muted-foreground">No players.</p>
-        )}
-      </div>
-      {onReopen && (
-        <Button variant="outline" onClick={onReopen}>
-          Reopen game
-        </Button>
-      )}
-    </main>
-  )
-}
