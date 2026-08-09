@@ -391,7 +391,7 @@ function SettingsPanel({
   const inviteUrl = `${location.origin}/room/${state.code}`
   const [copied, setCopied] = useState(false)
 
-  function numSetting(key: "pointsCorrect" | "pointsWrong", raw: string) {
+  function numSetting(key: keyof RoomState["settings"], raw: string) {
     const n = Number(raw)
     if (Number.isFinite(n)) act({ kind: "settings", settings: { [key]: n } })
   }
@@ -432,6 +432,15 @@ function SettingsPanel({
         type="number"
         defaultValue={state.settings.pointsWrong}
         onChange={(e) => numSetting("pointsWrong", e.target.value)}
+      />
+      <Label htmlFor="ptswo">
+        Points to everyone else on a wrong buzz (0 = off, buzz rounds only)
+      </Label>
+      <Input
+        id="ptswo"
+        type="number"
+        defaultValue={state.settings.pointsWrongOthers}
+        onChange={(e) => numSetting("pointsWrongOthers", e.target.value)}
       />
     </Panel>
   )
@@ -533,7 +542,16 @@ function ActionsPanel({
       kind: "points",
       playerId,
       delta: correct ? state.settings.pointsCorrect : state.settings.pointsWrong,
+      correct,
     })
+    // buzz only: in mc/free everyone answers at once, so "everyone else" would
+    // hand out points to people who were just as wrong
+    // falsy also covers rooms created before this setting existed
+    const others = state.settings.pointsWrongOthers
+    if (!correct && others && q?.type === "buzz")
+      for (const p of state.players)
+        if (p.id !== playerId)
+          act({ kind: "points", playerId: p.id, delta: others })
     act({ kind: "sound", name: correct ? "correct" : "wrong" })
   }
 
@@ -669,6 +687,7 @@ function ActionsPanel({
                         kind: "points",
                         playerId: pid,
                         delta: state.settings.pointsCorrect,
+                        correct: true,
                       })
                   })
                 }
@@ -960,7 +979,21 @@ function Leaderboard({
             >
               {p.name}
             </span>
-            <span className="text-2xl font-bold tabular-nums">{p.points}</span>
+            <span
+              className="text-sm font-semibold text-green-600 tabular-nums"
+              title="Correct answers"
+            >
+              {p.correct}
+            </span>
+            <span
+              className="text-sm font-semibold text-red-600 tabular-nums"
+              title="Wrong answers"
+            >
+              {p.wrong}
+            </span>
+            <span className="w-12 text-right text-2xl font-bold tabular-nums">
+              {p.points}
+            </span>
           </div>
         ))}
         {ranked.length === 0 && (

@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from "react"
 import { Link, createFileRoute } from "@tanstack/react-router"
-import { Download, Plus, Trash2, Upload } from "lucide-react"
+import {
+  ClipboardPaste,
+  Download,
+  Plus,
+  Sparkles,
+  Trash2,
+  Upload,
+} from "lucide-react"
 import { RevealImage, fileToDataUrl } from "@/components/reveal-image"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -37,6 +44,46 @@ function newQuestion(type: QuestionType): Question {
   return { id, type, text: "", answer: "" }
 }
 
+const aiPrompt = `Generate a question collection for a game show app. Reply with ONLY the JSON, no commentary, so it can be copied straight into the app's import.
+
+{
+  "name": "<collection name>",
+  "questions": [ ...question objects... ]
+}
+
+Every question object has "id" (unique string), "type", "text" (the question itself), and depending on the type the fields below.
+
+"mc" — multiple choice, players pick an option:
+{ "id": "q1", "type": "mc", "text": "...", "options": ["A", "B", "C", "D"], "correct": 0 }
+"correct" is the 0-based index into "options". At least 2 options.
+
+"buzz" — players buzz in, the host judges out loud:
+{ "id": "q2", "type": "buzz", "text": "...", "answer": "..." }
+
+"free" — players type an answer, the host judges:
+{ "id": "q3", "type": "free", "text": "...", "answer": "..." }
+
+"answer" is optional but include it — it is shown to the host when the round closes.
+
+There is a fourth type, "reveal", that slowly uncovers an uploaded image. Skip it: images are uploaded in the app, not generated here. For the same reason never emit an "image" field.
+
+Keep question text to a single line. Ask me for the topic, difficulty and number of questions if I have not given them.`
+
+async function copyAiPrompt() {
+  // ponytail: execCommand fallback because navigator.clipboard is missing on
+  // plain-http LAN addresses, which is how this app usually gets hosted
+  try {
+    await navigator.clipboard.writeText(aiPrompt)
+  } catch {
+    const ta = document.createElement("textarea")
+    ta.value = aiPrompt
+    document.body.append(ta)
+    ta.select()
+    document.execCommand("copy")
+    ta.remove()
+  }
+}
+
 function exportCollection(c: Collection) {
   const a = document.createElement("a")
   a.href = URL.createObjectURL(
@@ -53,19 +100,38 @@ function CreatePage() {
     collections[0]?.id ?? null,
   )
   const importRef = useRef<HTMLInputElement>(null)
+  const [copied, setCopied] = useState(false)
 
-  async function importCollection(file: File) {
+  function importJson(text: string) {
     try {
-      const parsed = JSON.parse(await file.text()) as Collection
+      // AIs like to wrap the answer in a ```json fence no matter what you ask
+      const parsed = JSON.parse(
+        text.trim().replace(/^```(?:json)?\n?|\n?```$/g, ""),
+      ) as Collection
       if (typeof parsed.name !== "string" || !Array.isArray(parsed.questions))
         throw new Error("bad shape")
-      // fresh id so importing your own export doesn't collide
-      const col = { ...parsed, id: crypto.randomUUID() }
+      // fresh id so importing your own export doesn't collide; question ids are
+      // filled in too because AI-written files tend to omit them
+      const col = {
+        ...parsed,
+        id: crypto.randomUUID(),
+        questions: parsed.questions.map((q) => ({
+          ...q,
+          id: q.id || crypto.randomUUID(),
+        })),
+      }
       setCollections((cs) => [...cs, col])
       setSelectedId(col.id)
     } catch {
       alert("Not a valid collection file.")
     }
+  }
+
+  async function importFromClipboard() {
+    // readText needs a secure context, which a plain-http LAN address is not
+    const text = await navigator.clipboard?.readText().catch(() => null)
+    const json = text ?? window.prompt("Paste the collection JSON:")
+    if (json) importJson(json)
   }
 
   useEffect(() => saveCollections(collections), [collections])
@@ -147,7 +213,21 @@ function CreatePage() {
             <Plus /> New collection
           </Button>
           <Button variant="outline" onClick={() => importRef.current?.click()}>
-            <Upload /> Import
+            <Upload /> Import file
+          </Button>
+          <Button variant="outline" onClick={() => void importFromClipboard()}>
+            <ClipboardPaste /> Import from clipboard
+          </Button>
+          <Button
+            variant="outline"
+            title="Copy a prompt that makes an AI write questions in this app's format"
+            onClick={() => {
+              void copyAiPrompt()
+              setCopied(true)
+              setTimeout(() => setCopied(false), 1500)
+            }}
+          >
+            <Sparkles /> {copied ? "Copied!" : "AI prompt"}
           </Button>
           <input
             ref={importRef}
@@ -156,7 +236,7 @@ function CreatePage() {
             className="hidden"
             onChange={(e) => {
               const f = e.target.files?.[0]
-              if (f) void importCollection(f)
+              if (f) void f.text().then(importJson)
               e.target.value = ""
             }}
           />

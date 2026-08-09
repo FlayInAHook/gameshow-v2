@@ -25,7 +25,12 @@ export type QuestionType = Question["type"]
 
 export type Collection = { id: string; name: string; questions: Question[] }
 
-export type Settings = { pointsCorrect: number; pointsWrong: number }
+export type Settings = {
+  pointsCorrect: number
+  pointsWrong: number
+  // given to every *other* player when someone answers wrong; 0 = off
+  pointsWrongOthers: number
+}
 
 export type PlayerInfo = {
   id: string
@@ -33,6 +38,9 @@ export type PlayerInfo = {
   points: number
   connected: boolean
   rtt: number
+  // host judgements, for the end-of-game leaderboard
+  correct: number
+  wrong: number
 }
 
 // questions travel in a separate "questions" message so images (data-urls)
@@ -64,7 +72,9 @@ export type HostAction =
   | { kind: "close" }
   | { kind: "open" }
   | { kind: "reset" }
-  | { kind: "points"; playerId: string; delta: number }
+  // correct is set only when this came from a host judgement, so manual +/-
+  // tweaks and everyone-else bonuses don't skew the tally
+  | { kind: "points"; playerId: string; delta: number; correct?: boolean }
   | { kind: "rename"; playerId: string; name: string }
   | { kind: "kick"; playerId: string }
   | { kind: "settings"; settings: Partial<Settings> }

@@ -98,7 +98,7 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         reveal: 0,
         buzzes: [],
         answers: {},
-        settings: { pointsCorrect: 10, pointsWrong: 0 },
+        settings: { pointsCorrect: 10, pointsWrong: 0, pointsWrongOthers: 0 },
         players: new Map(),
       }
       rooms.set(msg.code, room)
@@ -134,6 +134,8 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
           points: 0,
           connected: true,
           rtt: 0,
+          correct: 0,
+          wrong: 0,
         })
       }
     }
@@ -234,7 +236,11 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
       }
       case "points": {
         const p = room.players.get(a.playerId)
-        if (p) p.points += a.delta
+        if (p) {
+          p.points += a.delta
+          if (a.correct === true) p.correct++
+          else if (a.correct === false) p.wrong++
+        }
         break
       }
       case "rename": {
