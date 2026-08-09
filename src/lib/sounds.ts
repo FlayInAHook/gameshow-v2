@@ -50,6 +50,15 @@ export const sounds: Record<SoundName, () => void> = {
     tone(165, 0, 0.16, "triangle", 0.18)
     tone(123, 0.16, 0.3, "triangle", 0.18)
   },
+  // countdown cues: a short blip per second, then a falling tone at zero
+  tick: () => {
+    initAudio()
+    tone(880, 0, 0.07, "triangle", 0.15)
+  },
+  timeup: () => {
+    initAudio()
+    tone(880, 0, 0.5, "triangle", 0.2, 220)
+  },
   tada: () => {
     initAudio()
     tone(523, 0, 0.12, "triangle", 0.18)

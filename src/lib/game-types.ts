@@ -32,6 +32,10 @@ export type Settings = {
   pointsWrongOthers: number
   // how far one "Step reveal" press uncovers, in percent
   revealStepPercent: number
+  // once someone buzzes, players stop seeing the question and its image
+  buzzHidesQuestion: boolean
+  // seconds on the host-started countdown for mc rounds; 0 = no timer
+  mcSeconds: number
 }
 
 export type PlayerInfo = {
@@ -61,13 +65,21 @@ export type RoomState = {
   revealed: boolean
   // image-reveal progress 0..1
   reveal: number
+  // seconds left on the round timer, counted down by the server; null = no timer
+  timerLeft: number | null
   // effective (rtt-compensated) press times, epoch ms, sorted ascending
   buzzes: { playerId: string; time: number }[]
   answers: Record<string, string>
   settings: Settings
 }
 
-export type SoundName = "buzzer" | "correct" | "wrong" | "tada"
+export type SoundName =
+  | "buzzer"
+  | "correct"
+  | "wrong"
+  | "tada"
+  | "tick"
+  | "timeup"
 
 export type HostAction =
   | { kind: "question"; index: number | null }
@@ -87,6 +99,7 @@ export type HostAction =
   | { kind: "revealAuto" }
   // drops the buzzes without touching reveal progress, unlike "reset"
   | { kind: "clearBuzz" }
+  | { kind: "startTimer" }
   | { kind: "end" }
   | { kind: "reopen" }
 

@@ -24,6 +24,8 @@ type Room = {
   revealTimer?: ReturnType<typeof setInterval>
   // a buzz froze the auto-reveal; clearing the buzzer resumes it
   revealPaused?: boolean
+  timerLeft: number | null
+  roundTimer?: ReturnType<typeof setInterval>
   buzzes: { playerId: string; time: number }[]
   answers: Record<string, string>
   settings: Settings
@@ -50,6 +52,7 @@ function stateOf(room: Room): RoomState {
     locked: room.locked,
     revealed: room.revealed,
     reveal: room.reveal,
+    timerLeft: room.timerLeft,
     buzzes: room.buzzes,
     answers: room.answers,
     settings: room.settings,
@@ -67,6 +70,20 @@ function stopReveal(room: Room) {
   if (room.revealTimer) clearInterval(room.revealTimer)
   room.revealTimer = undefined
   room.revealPaused = false
+}
+
+function stopTimer(room: Room) {
+  if (room.roundTimer) clearInterval(room.roundTimer)
+  room.roundTimer = undefined
+  room.timerLeft = null
+}
+
+function closeRound(room: Room) {
+  room.locked = true
+  room.revealed = true
+  room.reveal = 1
+  stopReveal(room)
+  stopTimer(room)
 }
 
 // resumes from wherever room.reveal already is — the caller zeroes it to restart
@@ -116,6 +133,7 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         locked: false,
         revealed: false,
         reveal: 0,
+        timerLeft: null,
         buzzes: [],
         answers: {},
         settings: {
@@ -123,6 +141,8 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
           pointsWrong: 0,
           pointsWrongOthers: 0,
           revealStepPercent: 8,
+          buzzHidesQuestion: false,
+          mcSeconds: 0,
         },
         players: new Map(),
       }
@@ -223,12 +243,10 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         room.answers = {}
         room.reveal = 0
         stopReveal(room)
+        stopTimer(room)
         break
       case "close":
-        room.locked = true
-        room.revealed = true
-        room.reveal = 1
-        stopReveal(room)
+        closeRound(room)
         break
       // un-close without losing the round: buzzes, answers and reveal stay put
       case "open":
@@ -242,6 +260,7 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         room.answers = {}
         room.reveal = 0
         stopReveal(room)
+        stopTimer(room)
         break
       case "reveal":
         room.reveal = Math.min(1, Math.max(0, a.to))
@@ -257,6 +276,24 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         room.buzzes = []
         if (room.revealPaused) startReveal(room)
         break
+      case "startTimer": {
+        const secs = room.settings.mcSeconds
+        if (!secs || secs < 1) break
+        stopTimer(room)
+        room.timerLeft = Math.round(secs)
+        room.roundTimer = setInterval(() => {
+          const left = (room.timerLeft ?? 1) - 1
+          if (left > 0) room.timerLeft = left
+          else {
+            closeRound(room)
+            // closeRound nulls timerLeft; put the 0 back so clients can land
+            // their final countdown cue. the next question clears it
+            room.timerLeft = 0
+          }
+          broadcast(room)
+        }, 1000)
+        break
+      }
       case "points": {
         const p = room.players.get(a.playerId)
         if (p) {
@@ -298,6 +335,7 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
       case "end":
         room.phase = "ended"
         stopReveal(room)
+        stopTimer(room)
         break
       case "reopen":
         room.phase = "playing"

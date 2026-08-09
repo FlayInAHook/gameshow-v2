@@ -8,6 +8,7 @@ import {
   Pencil,
   Play,
   RotateCcw,
+  Timer,
   Trophy,
   UserX,
   Volume2,
@@ -460,6 +461,29 @@ function SettingsPanel({
         defaultValue={state.settings.revealStepPercent}
         onChange={(e) => numSetting("revealStepPercent", e.target.value)}
       />
+      <Label htmlFor="mcsec">
+        Multiple choice time limit in seconds (0 = off)
+      </Label>
+      <Input
+        id="mcsec"
+        type="number"
+        min={0}
+        defaultValue={state.settings.mcSeconds}
+        onChange={(e) => numSetting("mcSeconds", e.target.value)}
+      />
+      <label className="mt-2 flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={state.settings.buzzHidesQuestion ?? false}
+          onChange={(e) =>
+            act({
+              kind: "settings",
+              settings: { buzzHidesQuestion: e.target.checked },
+            })
+          }
+        />
+        Buzzing hides the question from players
+      </label>
     </Panel>
   )
 }
@@ -638,6 +662,22 @@ function ActionsPanel({
             </div>
           )}
 
+          {q.type === "mc" && state.settings.mcSeconds > 0 && (
+            <div className="flex items-center gap-3">
+              <Button
+                disabled={state.timerLeft !== null}
+                onClick={() => act({ kind: "startTimer" })}
+              >
+                <Timer /> Start timer ({state.settings.mcSeconds}s)
+              </Button>
+              {state.timerLeft !== null && (
+                <span className="text-2xl font-bold tabular-nums">
+                  {state.timerLeft}s
+                </span>
+              )}
+            </div>
+          )}
+
           {state.buzzes.length > 0 && (
             <div className="flex flex-col gap-2">
               <Label>Buzz order (ping-adjusted)</Label>
@@ -811,6 +851,18 @@ function PlayerView({
   const myBuzzIndex = state.buzzes.findIndex((b) => b.playerId === playerId)
   const [freeText, setFreeText] = useState("")
   const buzzable = q?.type === "buzz" || q?.type === "reveal"
+  // keeps the rest of the room from reading on while the host judges the buzz
+  const hideQuestion =
+    state.settings.buzzHidesQuestion && state.buzzes.length > 0
+
+  // countdown cues: a heads-up at 10s, then every second from 5 down to 0.
+  // the dep is the value itself, so each second fires exactly once
+  const timerLeft = state.timerLeft
+  useEffect(() => {
+    if (timerLeft === null) return
+    if (timerLeft === 0) sounds.timeup()
+    else if (timerLeft === 10 || timerLeft <= 5) sounds.tick()
+  }, [timerLeft])
 
   // spacebar buzzes on buzz questions
   const canBuzz = buzzable && !state.locked && myBuzzIndex < 0
@@ -848,24 +900,43 @@ function PlayerView({
         </div>
       ) : (
         <div className="flex flex-1 flex-col items-center gap-6 pt-8">
-          <h1 className="text-center text-3xl font-bold">{q.text}</h1>
+          {state.timerLeft !== null && (
+            <span
+              className={cn(
+                "text-5xl font-black tabular-nums",
+                state.timerLeft <= 5 && "text-red-600",
+              )}
+            >
+              {state.timerLeft}
+            </span>
+          )}
 
-          {q.image &&
-            (q.type === "reveal" ? (
-              <RevealImage
-                src={q.image}
-                filters={q.filters}
-                progress={state.revealed ? 1 : state.reveal}
-                zoom={q.zoom}
-                className="max-h-[45svh] rounded-lg"
-              />
-            ) : (
-              <img
-                src={q.image}
-                alt=""
-                className="max-h-[45svh] max-w-full rounded-lg"
-              />
-            ))}
+          {hideQuestion ? (
+            <p className="animate-pulse text-center text-xl text-muted-foreground">
+              Buzzed — question hidden
+            </p>
+          ) : (
+            <>
+              <h1 className="text-center text-3xl font-bold">{q.text}</h1>
+
+              {q.image &&
+                (q.type === "reveal" ? (
+                  <RevealImage
+                    src={q.image}
+                    filters={q.filters}
+                    progress={state.revealed ? 1 : state.reveal}
+                    zoom={q.zoom}
+                    className="max-h-[45svh] rounded-lg"
+                  />
+                ) : (
+                  <img
+                    src={q.image}
+                    alt=""
+                    className="max-h-[45svh] max-w-full rounded-lg"
+                  />
+                ))}
+            </>
+          )}
 
           {q.type === "mc" && (
             <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
