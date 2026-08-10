@@ -60,6 +60,7 @@ function RoomPage() {
           playerId,
           collectionName: collection.name,
           questions: collection.questions,
+          settings: collection.settings,
         }
       : { type: "join" as const, code, playerId, name }
 

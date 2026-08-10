@@ -88,8 +88,12 @@ tally, so use them for corrections and prizes.
 | Points to everyone else on a wrong buzz | 1 | nobody buzzes → 2–3; pure reflex round → 0 |
 | Reveal step size | 5% | big obvious images → 10%; cruel ones → 2–3% |
 | Multiple choice time limit | 0 (off) | the room stalls → 20–30s |
-| Buzzing hides the question | off | the question text gives the answer away once someone buzzes |
+| Buzzing hides the question | on | a long question needs re-reading → off |
 | Buzz calculations: friends mode | on | see fairness, below |
+
+Set these on the collection itself, under **Room settings** in the create page,
+and a game is configured once and hosts the same way every time. The host panel
+edits the same values live; changes made mid-game survive a host reconnect.
 
 The timer, when on, closes the round by itself at zero — which still reveals
 nothing, so the ceremony is unchanged.

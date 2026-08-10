@@ -7,7 +7,11 @@ import type {
   ServerMsg,
   Settings,
 } from "../src/lib/game-types"
-import { MAX_ANSWER, WS_PORT } from "../src/lib/game-types"
+import {
+  MAX_ANSWER,
+  WS_PORT,
+  defaultSettings,
+} from "../src/lib/game-types"
 
 type Room = {
   code: string
@@ -230,15 +234,9 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         questionAt: Date.now(),
         buzzes: [],
         answers: {},
-        settings: {
-          pointsCorrect: 3,
-          pointsWrong: 0,
-          pointsWrongOthers: 1,
-          revealStepPercent: 5,
-          buzzHidesQuestion: false,
-          mcSeconds: 0,
-          friendsBuzz: true,
-        },
+        // the host's collection can carry its own; anything it leaves out
+        // falls back to the defaults
+        settings: { ...defaultSettings, ...msg.settings },
         players: new Map(),
       }
       rooms.set(msg.code, room)

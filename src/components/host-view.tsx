@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react"
 import { RevealImage } from "@/components/reveal-image"
+import { SettingsFields } from "@/components/room-settings"
 import { ConnectionDot, McOption, VoteBubbles } from "@/components/scoreboard"
 import {
   HoverCard,
@@ -249,11 +250,6 @@ function SettingsPanel({
   connected: boolean
   spectateCode: string | null
 }) {
-  function numSetting(key: keyof RoomState["settings"], raw: string) {
-    const n = Number(raw)
-    if (Number.isFinite(n)) act({ kind: "settings", settings: { [key]: n } })
-  }
-
   return (
     <Panel title={`Room ${state.code}`}>
       <div className="flex items-center gap-2 text-sm">
@@ -267,79 +263,10 @@ function SettingsPanel({
           url={`${location.origin}/spectate/${spectateCode}`}
         />
       )}
-      <Label className="mt-2" htmlFor="ptsc">
-        Points for correct
-      </Label>
-      <Input
-        id="ptsc"
-        type="number"
-        defaultValue={state.settings.pointsCorrect}
-        onChange={(e) => numSetting("pointsCorrect", e.target.value)}
+      <SettingsFields
+        settings={state.settings}
+        onChange={(settings) => act({ kind: "settings", settings })}
       />
-      <Label htmlFor="ptsw">Points for wrong (use a negative number)</Label>
-      <Input
-        id="ptsw"
-        type="number"
-        defaultValue={state.settings.pointsWrong}
-        onChange={(e) => numSetting("pointsWrong", e.target.value)}
-      />
-      <Label htmlFor="ptswo">
-        Points to everyone else on a wrong buzz (0 = off, buzz and reveal rounds)
-      </Label>
-      <Input
-        id="ptswo"
-        type="number"
-        defaultValue={state.settings.pointsWrongOthers}
-        onChange={(e) => numSetting("pointsWrongOthers", e.target.value)}
-      />
-      <Label htmlFor="rstep">Reveal step size (%)</Label>
-      <Input
-        id="rstep"
-        type="number"
-        min={1}
-        max={100}
-        defaultValue={state.settings.revealStepPercent}
-        onChange={(e) => numSetting("revealStepPercent", e.target.value)}
-      />
-      <Label htmlFor="mcsec">
-        Multiple choice time limit in seconds (0 = off)
-      </Label>
-      <Input
-        id="mcsec"
-        type="number"
-        min={0}
-        defaultValue={state.settings.mcSeconds}
-        onChange={(e) => numSetting("mcSeconds", e.target.value)}
-      />
-      <label className="mt-2 flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={state.settings.buzzHidesQuestion ?? false}
-          onChange={(e) =>
-            act({
-              kind: "settings",
-              settings: { buzzHidesQuestion: e.target.checked },
-            })
-          }
-        />
-        Buzzing hides the question from players
-      </label>
-      <label
-        className="flex items-center gap-2 text-sm"
-        title="Orders buzzes by each player's own reaction time, cancelling latency both ways. Trusts the player's device, so only for friendly games"
-      >
-        <input
-          type="checkbox"
-          checked={state.settings.friendsBuzz ?? false}
-          onChange={(e) =>
-            act({
-              kind: "settings",
-              settings: { friendsBuzz: e.target.checked },
-            })
-          }
-        />
-        Buzzing calculations: friends mode
-      </label>
     </Panel>
   )
 }

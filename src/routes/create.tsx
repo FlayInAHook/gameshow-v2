@@ -9,12 +9,14 @@ import {
   Upload,
 } from "lucide-react"
 import { RevealImage, fileToDataUrl } from "@/components/reveal-image"
+import { SettingsFields } from "@/components/room-settings"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { loadCollections, saveCollections } from "@/lib/store"
+import { defaultSettings } from "@/lib/game-types"
 import type {
   Collection,
   Question,
@@ -179,9 +181,10 @@ function CreatePage() {
         <h1 className="text-2xl font-bold">Create questions</h1>
       </div>
 
-      <div className="flex gap-6">
-        {/* collection list */}
-        <div className="flex w-72 shrink-0 flex-col gap-2">
+      <div className="flex items-start gap-6">
+        {/* collection list — sticks while the question list scrolls past it,
+            and scrolls on its own once there are more collections than fit */}
+        <div className="sticky top-6 flex max-h-[calc(100svh-3rem)] w-72 shrink-0 flex-col gap-2 overflow-y-auto">
           {collections.map((c) => (
             <div key={c.id} className="flex items-center gap-1">
               {/* min-w-0: the button is whitespace-nowrap, so its automatic
@@ -264,6 +267,32 @@ function CreatePage() {
                 onChange={(e) => updateSelected({ name: e.target.value })}
               />
             </div>
+
+            {/* native <details>: closed by default so it doesn't sit between
+                you and the questions. keyed on the collection because the
+                number fields inside are uncontrolled */}
+            <details key={selected.id} className="rounded-xl border px-4 py-3">
+              <summary className="cursor-pointer text-sm font-medium select-none">
+                Room settings
+              </summary>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Used when you host this collection. The host can still change
+                them mid-game.
+              </p>
+              <div className="flex flex-col gap-2">
+                <SettingsFields
+                  settings={selected.settings ?? defaultSettings}
+                  onChange={(patch) =>
+                    updateSelected({
+                      settings: {
+                        ...(selected.settings ?? defaultSettings),
+                        ...patch,
+                      },
+                    })
+                  }
+                />
+              </div>
+            </details>
 
             {selected.questions.map((q, i) => (
               <Card

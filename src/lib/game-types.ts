@@ -23,7 +23,14 @@ export type Question =
 
 export type QuestionType = Question["type"]
 
-export type Collection = { id: string; name: string; questions: Question[] }
+// settings ride along with the collection so a game can be set up once and
+// hosted the same way every time; the host can still change them mid-game
+export type Collection = {
+  id: string
+  name: string
+  questions: Question[]
+  settings?: Settings
+}
 
 export type Settings = {
   pointsCorrect: number
@@ -39,6 +46,18 @@ export type Settings = {
   // order buzzes by the reaction time each player's own device reports, which
   // cancels latency in both directions but takes the client at its word
   friendsBuzz: boolean
+}
+
+export const defaultSettings: Settings = {
+  pointsCorrect: 3,
+  pointsWrong: 0,
+  pointsWrongOthers: 1,
+  revealStepPercent: 5,
+  // a buzzed question stays on the buzzer's screen, not everyone's — the room
+  // waits for the verdict instead of reading on
+  buzzHidesQuestion: true,
+  mcSeconds: 0,
+  friendsBuzz: true,
 }
 
 export type PlayerInfo = {
@@ -140,6 +159,9 @@ export type ClientMsg =
       playerId: string
       collectionName: string
       questions: Question[]
+      // only applied when the room is first created, so a host reconnecting
+      // can't wipe out settings tuned during the game
+      settings?: Settings
     }
   | { type: "join"; code: string; playerId: string; name: string }
   // read-only viewer; code is the room's spectate code, not its join code
