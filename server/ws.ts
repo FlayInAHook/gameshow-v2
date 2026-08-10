@@ -24,6 +24,7 @@ type Room = {
   locked: boolean
   revealed: boolean
   revealedOptions: number[]
+  revealedAnswers: string[]
   // mc options already paid out this round; server-only, clients never need it
   paidOptions: number[]
   reveal: number
@@ -59,7 +60,26 @@ function newSpectateCode(): string {
   return code
 }
 
-function stateOf(room: Room): RoomState {
+// what a player is allowed to see of everyone's answers: their own, plus the
+// ones the host has already put in front of the room
+function answersFor(room: Room, viewerId: string): Record<string, string> {
+  const q = currentQuestion(room)
+  const out: Record<string, string> = {}
+  for (const [pid, value] of Object.entries(room.answers)) {
+    const shown =
+      q?.type === "mc"
+        ? room.revealedOptions.includes(Number(value))
+        : q?.type === "free" && room.revealedAnswers.includes(pid)
+    if (pid === viewerId || shown) out[pid] = value
+  }
+  return out
+}
+
+// viewerId marks a player's own view. host and spectators (no viewerId) see the
+// room as it really is; a player only ever receives what has been revealed, so
+// there is nothing to read ahead in devtools
+function stateOf(room: Room, viewerId?: string): RoomState {
+  const q = currentQuestion(room)
   return {
     code: room.code,
     phase: room.phase,
@@ -72,20 +92,43 @@ function stateOf(room: Room): RoomState {
     locked: room.locked,
     revealed: room.revealed,
     revealedOptions: room.revealedOptions,
+    revealedAnswers: room.revealedAnswers,
+    // the verdicts travel with the round instead of the question, so the
+    // answer key never sits in a player's browser before it is revealed
+    correctOption:
+      q?.type === "mc" && room.revealedOptions.includes(q.correct)
+        ? q.correct
+        : null,
+    answerText:
+      room.revealed && q && q.type !== "mc" ? (q.answer ?? null) : null,
     reveal: room.reveal,
     timerLeft: room.timerLeft,
     questionAt: room.questionAt,
     buzzes: room.buzzes,
-    answers: room.answers,
+    answers: viewerId === undefined ? room.answers : answersFor(room, viewerId),
     settings: room.settings,
   }
 }
 
-function questionsMsg(room: Room): string {
+// players get the questions with the answer key cut out — everything else
+// (text, options, image) is on their screen anyway
+function questionsMsg(room: Room, full: boolean): string {
   return JSON.stringify({
     type: "questions",
-    questions: room.questions,
+    questions: full
+      ? room.questions
+      : room.questions.map((q) =>
+          q.type === "mc"
+            ? { ...q, correct: -1 }
+            : { ...q, answer: undefined },
+        ),
   } satisfies ServerMsg)
+}
+
+// the room code is the topic everyone shares (sounds); this one carries the
+// unredacted room, so only the host and its spectators are subscribed
+function fullTopic(code: string) {
+  return `${code}#full`
 }
 
 function stopReveal(room: Room) {
@@ -105,10 +148,11 @@ function currentQuestion(room: Room): Question | undefined {
 }
 
 function closeRound(room: Room) {
+  const type = currentQuestion(room)?.type
   room.locked = true
-  // mc answers stay face-down — the host flips options itself, so a close (or
-  // the timer running out) is only "pencils down"
-  room.revealed = currentQuestion(room)?.type !== "mc"
+  // mc and free stay face-down — the host flips options and reads answers out
+  // itself, so a close (or the timer running out) is only "pencils down"
+  room.revealed = type !== "mc" && type !== "free"
   room.reveal = 1
   stopReveal(room)
   stopTimer(room)
@@ -130,11 +174,29 @@ function startReveal(room: Room) {
   )
 }
 
+// host and spectators share one topic because they see the same full room;
+// every player needs their own payload, if only for their own answer
+// ponytail: a send per player per broadcast — a party-sized room, not a fanout
 function broadcast(room: Room) {
   server.publish(
-    room.code,
+    fullTopic(room.code),
     JSON.stringify({ type: "state", state: stateOf(room) } satisfies ServerMsg),
   )
+  for (const id of room.players.keys()) {
+    const ws = sockets.get(id)
+    if (ws?.readyState === 1)
+      send(ws, { type: "state", state: stateOf(room, id) })
+  }
+}
+
+// same split for the questions, which carry the answer key
+function sendQuestions(room: Room) {
+  server.publish(fullTopic(room.code), questionsMsg(room, true))
+  const stripped = questionsMsg(room, false)
+  for (const id of room.players.keys()) {
+    const ws = sockets.get(id)
+    if (ws?.readyState === 1) ws.send(stripped)
+  }
 }
 
 function send(ws: Ws, msg: ServerMsg) {
@@ -161,6 +223,7 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         locked: false,
         revealed: false,
         revealedOptions: [],
+        revealedAnswers: [],
         paidOptions: [],
         reveal: 0,
         timerLeft: null,
@@ -187,10 +250,11 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
     ws.data = { playerId: msg.playerId, code: msg.code }
     sockets.set(msg.playerId, ws)
     ws.subscribe(msg.code)
+    ws.subscribe(fullTopic(msg.code))
     send(ws, { type: "state", state: stateOf(room) })
     send(ws, { type: "spectateCode", code: room.spectateCode })
     broadcast(room)
-    server.publish(room.code, questionsMsg(room))
+    sendQuestions(room)
     return
   }
 
@@ -202,8 +266,9 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
     // and the `!playerId` guard below drops every other message they could send
     ws.data = { code: room.code }
     ws.subscribe(room.code)
+    ws.subscribe(fullTopic(room.code))
     send(ws, { type: "state", state: stateOf(room) })
-    ws.send(questionsMsg(room))
+    ws.send(questionsMsg(room, true))
     return
   }
 
@@ -213,8 +278,10 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
     ws.data = { playerId: msg.playerId, code: msg.code }
     sockets.set(msg.playerId, ws)
     ws.subscribe(msg.code)
-    if (msg.playerId === room.hostId) {
+    const isHost = msg.playerId === room.hostId
+    if (isHost) {
       room.hostConnected = true
+      ws.subscribe(fullTopic(msg.code))
       send(ws, { type: "spectateCode", code: room.spectateCode })
     } else {
       const existing = room.players.get(msg.playerId)
@@ -236,8 +303,11 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         })
       }
     }
-    send(ws, { type: "state", state: stateOf(room) })
-    ws.send(questionsMsg(room))
+    send(ws, {
+      type: "state",
+      state: stateOf(room, isHost ? undefined : msg.playerId),
+    })
+    ws.send(questionsMsg(room, isHost))
     broadcast(room)
     return
   }
@@ -308,6 +378,7 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         room.locked = false
         room.revealed = false
         room.revealedOptions = []
+        room.revealedAnswers = []
         room.paidOptions = []
         room.buzzes = []
         room.answers = {}
@@ -328,6 +399,7 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         room.locked = false
         room.revealed = false
         room.revealedOptions = []
+        room.revealedAnswers = []
         room.paidOptions = []
         room.buzzes = []
         room.answers = {}
@@ -366,6 +438,16 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         }
         break
       }
+      case "revealAnswers":
+        // free answers are typed text, so the host still judges them — showing
+        // one to the room pays out nothing on its own
+        room.revealedAnswers = [
+          ...new Set(a.playerIds.filter((id) => room.players.has(id))),
+        ]
+        break
+      case "revealSolution":
+        room.revealed = a.on
+        break
       case "revealAuto":
         // start over: otherwise pressing this at a full reveal (after "Show
         // full", or a close/open round, which pin it to 1) does nothing at all

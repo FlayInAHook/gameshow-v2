@@ -477,6 +477,15 @@ function ActionsPanel({
     // the flip is the payoff, so the whole room hears the verdict
     if (!shown) act({ kind: "sound", name: correct ? "correct" : "wrong" })
   }
+  // same toggle for a free round, except a typed answer carries no verdict —
+  // the host still judges it with the award buttons
+  const flipAnswer = (pid: string) =>
+    act({
+      kind: "revealAnswers",
+      playerIds: state.revealedAnswers.includes(pid)
+        ? state.revealedAnswers.filter((x) => x !== pid)
+        : [...state.revealedAnswers, pid],
+    })
   // reveal rounds are buzzed the same way buzz rounds are, so they score the
   // same way: in mc/free everyone answers at once, where a verdict is private
   // and "everyone else" would pay people who were just as wrong
@@ -560,7 +569,30 @@ function ActionsPanel({
             </div>
           )}
           {q.type !== "mc" && q.answer && (
-            <p className="text-sm text-muted-foreground">Answer: {q.answer}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-sm text-muted-foreground">Answer: {q.answer}</p>
+              {/* buzz and reveal rounds put the answer up when they close;
+                  free waits for the host, after the players' own answers */}
+              {q.type === "free" && (
+                <Button
+                  size="sm"
+                  variant={state.revealed ? "outline" : "default"}
+                  onClick={() =>
+                    act({ kind: "revealSolution", on: !state.revealed })
+                  }
+                >
+                  {state.revealed ? (
+                    <>
+                      <EyeOff /> Hide answer
+                    </>
+                  ) : (
+                    <>
+                      <Eye /> Reveal answer
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
           )}
           {q.image && q.type !== "reveal" && (
             <img src={q.image} alt="" className="max-h-32 self-start rounded-lg" />
@@ -649,25 +681,68 @@ function ActionsPanel({
               same information, and flipping an option scores it */}
           {q.type !== "mc" && Object.keys(state.answers).length > 0 && (
             <div className="flex flex-col gap-2">
-              <Label>Answers</Label>
-              {Object.entries(state.answers).map(([pid, value]) => (
-                <div
-                  key={pid}
-                  className="flex items-start gap-2 rounded-lg border p-2 text-base"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate font-semibold">
-                      {playerName(pid)}
+              <Label>
+                {q.type === "free"
+                  ? "Answers — the eye reads one out to the room"
+                  : "Answers"}
+              </Label>
+              {Object.entries(state.answers).map(([pid, value]) => {
+                const shown = state.revealedAnswers.includes(pid)
+                return (
+                  <div
+                    key={pid}
+                    className={cn(
+                      "flex items-start gap-2 rounded-lg border p-2 text-base",
+                      shown && "border-primary bg-primary/10",
+                    )}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-semibold">
+                        {playerName(pid)}
+                      </div>
+                      {/* quoted behind a rule so the answer can't be mistaken
+                          for the name once it wraps onto its own lines */}
+                      <div className="mt-1 border-l-2 border-muted-foreground/40 pl-2 text-muted-foreground wrap-anywhere">
+                        {value}
+                      </div>
                     </div>
-                    {/* quoted behind a rule so the answer can't be mistaken
-                        for the name once it wraps onto its own lines */}
-                    <div className="mt-1 border-l-2 border-muted-foreground/40 pl-2 text-muted-foreground wrap-anywhere">
-                      {value}
-                    </div>
+                    {q.type === "free" && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title={shown ? "Hide from the room" : "Read out to the room"}
+                        onClick={() => flipAnswer(pid)}
+                      >
+                        {shown ? <EyeOff /> : <Eye />}
+                      </Button>
+                    )}
+                    <AwardButtons onAward={(ok) => award(pid, ok)} />
                   </div>
-                  <AwardButtons onAward={(ok) => award(pid, ok)} />
+                )
+              })}
+              {q.type === "free" && (
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      act({
+                        kind: "revealAnswers",
+                        playerIds: Object.keys(state.answers),
+                      })
+                    }
+                  >
+                    <Eye /> Read all out
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => act({ kind: "revealAnswers", playerIds: [] })}
+                  >
+                    <EyeOff /> Hide all
+                  </Button>
                 </div>
-              ))}
+              )}
             </div>
           )}
 

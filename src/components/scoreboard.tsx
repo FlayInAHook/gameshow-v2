@@ -1,9 +1,16 @@
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import type { RoomState } from "@/lib/game-types"
+import type { Question, RoomState } from "@/lib/game-types"
 
 // shared by the room (host/player) and the spectate screen
+
+// is the question's own answer out yet? mc gives it away by flipping the
+// correct option, the other types by the host revealing it. both come off the
+// round state, which is the only place a player's browser ever sees them
+export function solutionOut(state: RoomState, q: Question) {
+  return q.type === "mc" ? state.correctOption !== null : state.revealed
+}
 
 // who picked this mc option. the caller decides when it is safe to show —
 // player screens wait for the round to lock, or everyone just copies whoever
@@ -29,6 +36,41 @@ export function VoteBubbles({
         >
           {p.name}
         </Badge>
+      ))}
+    </div>
+  )
+}
+
+// the free-text answers the host has read out to the room, in the order they
+// were flipped. the ones still face-down simply aren't here
+export function AnswerBubbles({
+  state,
+  meId,
+}: {
+  state: RoomState
+  meId?: string
+}) {
+  const rows = state.revealedAnswers.flatMap((id) => {
+    const player = state.players.find((p) => p.id === id)
+    const value = state.answers[id]
+    return player && value !== undefined ? [{ player, value }] : []
+  })
+  if (rows.length === 0) return null
+  return (
+    <div className="flex w-full flex-col gap-2">
+      {rows.map(({ player, value }) => (
+        <div
+          key={player.id}
+          className="flex items-start gap-2 rounded-lg border p-2 text-lg"
+        >
+          <Badge
+            variant={player.id === meId ? "default" : "secondary"}
+            className="mt-0.5 max-w-32"
+          >
+            {player.name}
+          </Badge>
+          <span className="min-w-0 flex-1 wrap-anywhere">{value}</span>
+        </div>
       ))}
     </div>
   )

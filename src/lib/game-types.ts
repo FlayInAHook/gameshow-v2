@@ -69,10 +69,18 @@ export type RoomState = {
   played: number[]
   locked: boolean
   revealed: boolean
-  // mc only: option indexes the host has flipped face-up. closing an mc round
-  // locks the answers without revealing anything, so the host can build
-  // suspense one option at a time
+  // mc and free stage their reveal: closing the round locks the answers without
+  // giving anything away, and the host then uncovers it a piece at a time.
+  // mc: option indexes flipped face-up
   revealedOptions: number[]
+  // free: players whose typed answer has been read out to the room
+  revealedAnswers: string[]
+  // the answer key, but only once it is out: players never receive it in the
+  // questions payload, so these are what their screen renders the verdict from.
+  // mc's correct option (null until flipped) and the answer text (null until
+  // the host reveals it)
+  correctOption: number | null
+  answerText: string | null
   // image-reveal progress 0..1
   reveal: number
   // seconds left on the round timer, counted down by the server; null = no timer
@@ -82,7 +90,8 @@ export type RoomState = {
   questionAt: number
   // effective (rtt-compensated) press times, epoch ms, sorted ascending
   buzzes: { playerId: string; time: number }[]
-  // a player who hasn't answered simply has no key here
+  // a player who hasn't answered simply has no key here. a player's own copy
+  // is filtered down to their answer plus the ones already shown to the room
   answers: Record<string, string | undefined>
   settings: Settings
 }
@@ -114,6 +123,10 @@ export type HostAction =
   // the full set of mc options to show face-up; host sends the whole set, so
   // one action covers flipping, unflipping and "reveal all"
   | { kind: "revealOptions"; indexes: number[] }
+  // same, for the players whose free-text answer is face-up
+  | { kind: "revealAnswers"; playerIds: string[] }
+  // the question's own answer, on a free round the host reveals last
+  | { kind: "revealSolution"; on: boolean }
   // drops the buzzes without touching reveal progress, unlike "reset"
   | { kind: "clearBuzz" }
   | { kind: "startTimer" }

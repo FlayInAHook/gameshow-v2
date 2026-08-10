@@ -3,10 +3,12 @@ import { Link, createFileRoute } from "@tanstack/react-router"
 import { HostView } from "@/components/host-view"
 import { RevealImage } from "@/components/reveal-image"
 import {
+  AnswerBubbles,
   ConnectionDot,
   Leaderboard,
   McOption,
   VoteBubbles,
+  solutionOut,
 } from "@/components/scoreboard"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -301,7 +303,9 @@ function PlayerView({
                 <div key={i} className="flex min-w-0 flex-col gap-1">
                   <McOption
                     option={opt}
-                    correct={i === q.correct}
+                    // from the round, not the question: q.correct never
+                    // reaches a player's browser
+                    correct={i === state.correctOption}
                     shown={state.revealedOptions.includes(i)}
                     mine={myAnswer === String(i)}
                     onClick={
@@ -386,17 +390,20 @@ function PlayerView({
               Submitted: {myAnswer}
             </p>
           )}
+          {q.type === "free" && (
+            <AnswerBubbles state={state} meId={playerId} />
+          )}
 
-          {state.revealed && q.type !== "mc" && q.answer && (
+          {state.answerText && (
             <p className="text-xl">
-              Answer: <strong>{q.answer}</strong>
+              Answer: <strong>{state.answerText}</strong>
             </p>
           )}
           {state.locked && (
             <Badge variant="secondary">
-              {q.type === "mc" && !state.revealedOptions.includes(q.correct)
-                ? "Answers locked — waiting for the reveal"
-                : "Round closed"}
+              {solutionOut(state, q)
+                ? "Round closed"
+                : "Answers locked — waiting for the reveal"}
             </Badge>
           )}
         </div>

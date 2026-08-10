@@ -2,12 +2,14 @@ import { useEffect, useRef } from "react"
 import { Link, createFileRoute } from "@tanstack/react-router"
 import { RevealImage } from "@/components/reveal-image"
 import {
+  AnswerBubbles,
   ConnectionDot,
   Leaderboard,
   McOption,
   VoteBubbles,
   medals,
   ranked,
+  solutionOut,
 } from "@/components/scoreboard"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -163,16 +165,20 @@ function Stage({ state, q }: { state: RoomState; q: Question | null }) {
         </p>
       )}
 
-      {state.revealed && q.type !== "mc" && q.answer && (
+      {/* the stage only carries what the room has been shown; the sidebar is
+          where this screen's operator sees everything live */}
+      {q.type === "free" && <AnswerBubbles state={state} />}
+
+      {state.answerText && (
         <p className="text-xl">
-          Answer: <strong>{q.answer}</strong>
+          Answer: <strong>{state.answerText}</strong>
         </p>
       )}
       {state.locked && (
         <Badge variant="secondary">
-          {q.type === "mc" && !state.revealedOptions.includes(q.correct)
-            ? "Answers locked — waiting for the reveal"
-            : "Round closed"}
+          {solutionOut(state, q)
+            ? "Round closed"
+            : "Answers locked — waiting for the reveal"}
         </Badge>
       )}
     </>
