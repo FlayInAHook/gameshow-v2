@@ -69,6 +69,10 @@ export type RoomState = {
   played: number[]
   locked: boolean
   revealed: boolean
+  // mc only: option indexes the host has flipped face-up. closing an mc round
+  // locks the answers without revealing anything, so the host can build
+  // suspense one option at a time
+  revealedOptions: number[]
   // image-reveal progress 0..1
   reveal: number
   // seconds left on the round timer, counted down by the server; null = no timer
@@ -107,6 +111,9 @@ export type HostAction =
   | { kind: "sound"; name: SoundName; playerId?: string }
   | { kind: "reveal"; to: number }
   | { kind: "revealAuto" }
+  // the full set of mc options to show face-up; host sends the whole set, so
+  // one action covers flipping, unflipping and "reveal all"
+  | { kind: "revealOptions"; indexes: number[] }
   // drops the buzzes without touching reveal progress, unlike "reset"
   | { kind: "clearBuzz" }
   | { kind: "startTimer" }

@@ -23,6 +23,9 @@ type Room = {
   played: number[]
   locked: boolean
   revealed: boolean
+  revealedOptions: number[]
+  // mc options already paid out this round; server-only, clients never need it
+  paidOptions: number[]
   reveal: number
   revealTimer?: ReturnType<typeof setInterval>
   // a buzz froze the auto-reveal; clearing the buzzer resumes it
@@ -68,6 +71,7 @@ function stateOf(room: Room): RoomState {
     played: room.played,
     locked: room.locked,
     revealed: room.revealed,
+    revealedOptions: room.revealedOptions,
     reveal: room.reveal,
     timerLeft: room.timerLeft,
     questionAt: room.questionAt,
@@ -96,9 +100,15 @@ function stopTimer(room: Room) {
   room.timerLeft = null
 }
 
+function currentQuestion(room: Room): Question | undefined {
+  return room.currentIndex !== null ? room.questions[room.currentIndex] : undefined
+}
+
 function closeRound(room: Room) {
   room.locked = true
-  room.revealed = true
+  // mc answers stay face-down — the host flips options itself, so a close (or
+  // the timer running out) is only "pencils down"
+  room.revealed = currentQuestion(room)?.type !== "mc"
   room.reveal = 1
   stopReveal(room)
   stopTimer(room)
@@ -106,8 +116,7 @@ function closeRound(room: Room) {
 
 // resumes from wherever room.reveal already is — the caller zeroes it to restart
 function startReveal(room: Room) {
-  const q =
-    room.currentIndex !== null ? room.questions[room.currentIndex] : undefined
+  const q = currentQuestion(room)
   stopReveal(room)
   if (q?.type !== "reveal" || !q.revealSeconds) return
   // 20 small state broadcasts over the configured duration
@@ -151,6 +160,8 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         played: [],
         locked: false,
         revealed: false,
+        revealedOptions: [],
+        paidOptions: [],
         reveal: 0,
         timerLeft: null,
         questionAt: Date.now(),
@@ -296,6 +307,8 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
           room.played.push(a.index)
         room.locked = false
         room.revealed = false
+        room.revealedOptions = []
+        room.paidOptions = []
         room.buzzes = []
         room.answers = {}
         room.reveal = 0
@@ -314,6 +327,8 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
       case "reset":
         room.locked = false
         room.revealed = false
+        room.revealedOptions = []
+        room.paidOptions = []
         room.buzzes = []
         room.answers = {}
         room.reveal = 0
@@ -326,6 +341,31 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         room.reveal = Math.min(1, Math.max(0, a.to))
         if (room.reveal >= 1) stopReveal(room)
         break
+      case "revealOptions": {
+        const q = currentQuestion(room)
+        if (q?.type !== "mc") break
+        room.revealedOptions = [
+          ...new Set(a.indexes.filter((i) => i >= 0 && i < q.options.length)),
+        ]
+        // flipping an option pays out everyone who picked it. paidOptions is
+        // what keeps an un-flip-and-re-flip (or a host reload) from paying the
+        // same answer twice — it only clears with the round
+        for (const i of room.revealedOptions) {
+          if (room.paidOptions.includes(i)) continue
+          room.paidOptions.push(i)
+          const correct = i === q.correct
+          for (const [pid, value] of Object.entries(room.answers)) {
+            const p = Number(value) === i ? room.players.get(pid) : undefined
+            if (!p) continue
+            p.points += correct
+              ? room.settings.pointsCorrect
+              : room.settings.pointsWrong
+            if (correct) p.correct++
+            else p.wrong++
+          }
+        }
+        break
+      }
       case "revealAuto":
         // start over: otherwise pressing this at a full reveal (after "Show
         // full", or a close/open round, which pin it to 1) does nothing at all

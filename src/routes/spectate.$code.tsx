@@ -4,6 +4,8 @@ import { RevealImage } from "@/components/reveal-image"
 import {
   ConnectionDot,
   Leaderboard,
+  McOption,
+  VoteBubbles,
   medals,
   ranked,
 } from "@/components/scoreboard"
@@ -140,24 +142,18 @@ function Stage({ state, q }: { state: RoomState; q: Question | null }) {
 
       {q.type === "mc" && (
         <div className="grid w-full max-w-3xl grid-cols-1 gap-3 sm:grid-cols-2">
-          {q.options.map((opt, i) => {
-            const picks = Object.values(state.answers).filter(
-              (v) => Number(v) === i,
-            ).length
-            const correct = state.revealed && i === q.correct
-            return (
-              <div
-                key={i}
-                className={cn(
-                  "flex min-h-16 items-center gap-2 rounded-lg border px-3 py-2 text-lg wrap-anywhere",
-                  correct && "border-2 border-green-500 bg-green-500/15",
-                )}
-              >
-                <span className="min-w-0 flex-1">{opt}</span>
-                {picks > 0 && <Badge variant="secondary">{picks}</Badge>}
-              </div>
-            )
-          })}
+          {q.options.map((opt, i) => (
+            <div key={i} className="flex min-w-0 flex-col gap-1">
+              <McOption
+                option={opt}
+                correct={i === q.correct}
+                shown={state.revealedOptions.includes(i)}
+              />
+              {/* the spectate link is the host's own second screen, so the
+                  votes show as they land rather than waiting for the lock */}
+              <VoteBubbles state={state} option={i} />
+            </div>
+          ))}
         </div>
       )}
 
@@ -172,7 +168,13 @@ function Stage({ state, q }: { state: RoomState; q: Question | null }) {
           Answer: <strong>{q.answer}</strong>
         </p>
       )}
-      {state.revealed && <Badge variant="secondary">Round closed</Badge>}
+      {state.locked && (
+        <Badge variant="secondary">
+          {q.type === "mc" && !state.revealedOptions.includes(q.correct)
+            ? "Answers locked — waiting for the reveal"
+            : "Round closed"}
+        </Badge>
+      )}
     </>
   )
 }
@@ -291,8 +293,9 @@ function LiveAnswers({ state, q }: { state: RoomState; q: Question | null }) {
               <div
                 className={cn(
                   "mt-1 border-l-2 border-muted-foreground/40 pl-2 wrap-anywhere text-muted-foreground",
-                  state.revealed && mcCorrect === true && "text-green-600",
-                  state.revealed && mcCorrect === false && "text-red-600",
+                  // this screen is the host's, so it doesn't wait on the reveal
+                  mcCorrect === true && "text-green-600",
+                  mcCorrect === false && "text-red-600",
                 )}
               >
                 {q.type === "mc" ? q.options[Number(value)] : value}
