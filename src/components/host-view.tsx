@@ -284,7 +284,7 @@ function SettingsPanel({
         onChange={(e) => numSetting("pointsWrong", e.target.value)}
       />
       <Label htmlFor="ptswo">
-        Points to everyone else on a wrong buzz (0 = off, buzz rounds only)
+        Points to everyone else on a wrong buzz (0 = off, buzz and reveal rounds)
       </Label>
       <Input
         id="ptswo"
@@ -477,6 +477,10 @@ function ActionsPanel({
     // the flip is the payoff, so the whole room hears the verdict
     if (!shown) act({ kind: "sound", name: correct ? "correct" : "wrong" })
   }
+  // reveal rounds are buzzed the same way buzz rounds are, so they score the
+  // same way: in mc/free everyone answers at once, where a verdict is private
+  // and "everyone else" would pay people who were just as wrong
+  const buzzed = q?.type === "buzz" || q?.type === "reveal"
   const award = (playerId: string, correct: boolean) => {
     act({
       kind: "points",
@@ -484,20 +488,17 @@ function ActionsPanel({
       delta: correct ? state.settings.pointsCorrect : state.settings.pointsWrong,
       correct,
     })
-    // buzz only: in mc/free everyone answers at once, so "everyone else" would
-    // hand out points to people who were just as wrong
     // falsy also covers rooms created before this setting existed
     const others = state.settings.pointsWrongOthers
-    if (!correct && others && q?.type === "buzz")
+    if (!correct && others && buzzed)
       for (const p of state.players)
         if (p.id !== playerId)
           act({ kind: "points", playerId: p.id, delta: others })
-    // a buzz verdict is a shared moment, so the room hears it; in mc/free the
-    // host judges everyone in turn and only your own result is yours to hear
+    // a buzzed verdict is a shared moment, so the whole room hears it
     act({
       kind: "sound",
       name: correct ? "correct" : "wrong",
-      playerId: q?.type === "buzz" ? undefined : playerId,
+      playerId: buzzed ? undefined : playerId,
     })
   }
 

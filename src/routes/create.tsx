@@ -40,7 +40,14 @@ function newQuestion(type: QuestionType): Question {
   const id = crypto.randomUUID()
   if (type === "mc") return { id, type, text: "", options: ["", ""], correct: 0 }
   if (type === "reveal")
-    return { id, type, text: "", answer: "", filters: ["pixelate"] }
+    return {
+      id,
+      type,
+      text: "",
+      answer: "",
+      filters: ["pixelate"],
+      revealSeconds: 30,
+    }
   return { id, type, text: "", answer: "" }
 }
 

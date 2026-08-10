@@ -168,10 +168,10 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         buzzes: [],
         answers: {},
         settings: {
-          pointsCorrect: 10,
+          pointsCorrect: 3,
           pointsWrong: 0,
-          pointsWrongOthers: 0,
-          revealStepPercent: 8,
+          pointsWrongOthers: 1,
+          revealStepPercent: 5,
           buzzHidesQuestion: false,
           mcSeconds: 0,
           friendsBuzz: true,
