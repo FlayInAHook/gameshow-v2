@@ -160,6 +160,9 @@ function RoomPage() {
   )
 }
 
+// "+1" reads as a reward where "1" reads as a label
+const signed = (n: number) => (n > 0 ? `+${n}` : String(n))
+
 function Center({ children }: { children: React.ReactNode }) {
   return (
     <main className="flex min-h-svh flex-col items-center justify-center gap-4 p-6">
@@ -317,7 +320,9 @@ function PlayerView({
             <>
               {q.type === "multi" && (
                 <p className="text-sm text-muted-foreground">
-                  Pick every correct option — the whole set has to be right.
+                  Pick every correct option — each right tick{" "}
+                  {signed(state.settings.multiPointsCorrect)}, each wrong one{" "}
+                  {signed(state.settings.multiPointsWrong)}.
                 </p>
               )}
               <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">

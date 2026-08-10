@@ -9,8 +9,8 @@ export type Question =
       options: string[]
       correct: number
     })
-  // pick every right option, not just one. scored all-or-nothing: the set has
-  // to match exactly, so ticking everything is worth nothing
+  // pick every right option, not just one. scored a tick at a time: each right
+  // one pays, each wrong one costs, so a scattergun answer cancels itself out
   | (QuestionBase & {
       type: "multi"
       options: string[]
@@ -69,6 +69,10 @@ export type Settings = {
   pointsWrong: number
   // given to every *other* player when someone answers wrong; 0 = off
   pointsWrongOthers: number
+  // select-all rounds are scored a tick at a time instead of all-or-nothing,
+  // so a half-right answer is worth something and a scattergun costs
+  multiPointsCorrect: number
+  multiPointsWrong: number
   // how far one "Step reveal" press uncovers, in percent
   revealStepPercent: number
   // once someone buzzes, players stop seeing the question and its image
@@ -84,6 +88,8 @@ export const defaultSettings: Settings = {
   pointsCorrect: 3,
   pointsWrong: 0,
   pointsWrongOthers: 1,
+  multiPointsCorrect: 1,
+  multiPointsWrong: -1,
   revealStepPercent: 5,
   // a buzzed question stays on the buzzer's screen, not everyone's — the room
   // waits for the verdict instead of reading on

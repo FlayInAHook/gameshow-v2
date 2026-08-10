@@ -26,7 +26,7 @@ feel like a reveal rather than a scoreboard update.
 | Type | Players do | Host does | Scored by |
 |---|---|---|---|
 | **Multiple choice** | tap an option | flip options face-up | the app, on flip |
-| **Select all** | tap every option they want | flip options face-up | the app, on the last correct flip |
+| **Select all** | tick every option they want | flip options face-up | the app, on each flip |
 | **Buzz** | hit BUZZ / space | judge out loud | host, per buzzer |
 | **Free input** | type an answer (200 chars) | read answers out, then the solution | host, per answer |
 | **Image reveal** | watch, then BUZZ | run the reveal, judge | host, per buzzer |
@@ -35,10 +35,11 @@ feel like a reveal rather than a scoreboard update.
   everyone who picked an option the moment it is flipped, once per option per
   round. Un-flipping does not take the points back — fix mistakes with the ±
   buttons in the players panel.
-- **Select all** is all-or-nothing: the picked set has to match the key
-  exactly, so ticking every box is worth nothing. Nothing is scored until the
-  last correct option is face-up, because until then nobody can see whose set
-  was complete — which makes that final flip the moment of the round.
+- **Select all** scores a tick at a time, on its own smaller scale: **+1** per
+  right tick, **−1** per wrong one, so a half-right answer is still worth
+  something and a scattergun cancels itself out. Points move on every flip,
+  including the wrong options — flipping a decoy takes points off everyone who
+  fell for it, which is its own moment.
 - **Free input** is never auto-scored. Typos, synonyms and wrong-but-funny
   answers are yours to rule on.
 - **Buzz** and **image reveal** are the only types with the wrong-answer bonus
@@ -68,6 +69,21 @@ That is aggressive on purpose — it keeps hands moving. If your group sits on
 the buzzer, raise the wrong-buzz bonus to 2 (threshold 33%) or 3 (40%). Setting
 it to 0 removes the risk entirely and buzz rounds become a pure reflex race.
 
+### Ticking everything on select all
+
+A player who ticks every box scores **(right options − wrong options)**. So the
+shape of the question, not the settings, is what stops the scattergun:
+
+| Options | Right | Tick everything | Get it exactly right |
+|---|---|---|---|
+| 5 | 3 | +1 | +3 |
+| 5 | 2 | −1 | +2 |
+| 6 | 3 | 0 | +3 |
+
+**Rule of thumb:** never write more right options than wrong ones. At least as
+many decoys as answers means ticking the lot is worth nothing, and knowing
+which is which is the only way to score.
+
 ### Guessing on multiple choice
 
 With wrong worth 0, a blind guess on four options is worth +0.75 and costs
@@ -92,6 +108,8 @@ tally, so use them for corrections and prizes.
 | Points for correct | 3 | rarely — change the others relative to this |
 | Points for wrong | 0 | multiple choice feels like a lottery → −1 |
 | Points to everyone else on a wrong buzz | 1 | nobody buzzes → 2–3; pure reflex round → 0 |
+| Select all: per correct tick | 1 | a select-all-heavy set should stay level with the other types |
+| Select all: per wrong tick | −1 | never above −1 unless you want the scattergun to pay |
 | Reveal step size | 5% | big obvious images → 10%; cruel ones → 2–3% |
 | Multiple choice time limit | 0 (off) | the room stalls → 20–30s |
 | Buzzing hides the question | on | a long question needs re-reading → off |
@@ -116,9 +134,9 @@ nothing, so the ceremony is unchanged.
   wrap into a wall.
 - **Write four options, not two.** Two options is a coin flip that pays full
   points.
-- **Select all wants five or six options and two or three right ones.** Fewer
-  than that and guessing the whole set is easy; make every option correct and
-  the question answers itself.
+- **Select all wants five or six options with at most half of them right.**
+  Fewer options and guessing the set is easy; more right than wrong and ticking
+  everything pays (see the table above).
 - **One line per question.** Long text pushes the answer buttons off a phone
   screen.
 - **Shrink images before uploading.** They live in your browser's local storage

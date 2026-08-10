@@ -2,6 +2,16 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import type { Settings } from "@/lib/game-types"
 
+// enough knobs now that they need grouping; both hosts of this form are narrow
+// columns, so the headings are the whole structure
+function Section({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="mt-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+      {children}
+    </p>
+  )
+}
+
 // the room's rules, edited in two places: on the collection before the game
 // (create page) and live in the host panel. the number inputs are uncontrolled
 // so a half-typed "-" survives — mount this with a key when the source changes
@@ -19,9 +29,8 @@ export function SettingsFields({
 
   return (
     <>
-      <Label className="mt-2" htmlFor="ptsc">
-        Points for correct
-      </Label>
+      <Section>Points</Section>
+      <Label htmlFor="ptsc">Points for correct</Label>
       <Input
         id="ptsc"
         type="number"
@@ -44,6 +53,25 @@ export function SettingsFields({
         defaultValue={settings.pointsWrongOthers}
         onChange={(e) => num("pointsWrongOthers", e.target.value)}
       />
+      <Section>Select all rounds</Section>
+      <Label htmlFor="mptsc">Points per correct tick</Label>
+      <Input
+        id="mptsc"
+        type="number"
+        defaultValue={settings.multiPointsCorrect}
+        onChange={(e) => num("multiPointsCorrect", e.target.value)}
+      />
+      <Label htmlFor="mptsw">
+        Points per wrong tick (use a negative number)
+      </Label>
+      <Input
+        id="mptsw"
+        type="number"
+        defaultValue={settings.multiPointsWrong}
+        onChange={(e) => num("multiPointsWrong", e.target.value)}
+      />
+
+      <Section>Rounds</Section>
       <Label htmlFor="rstep">Reveal step size (%)</Label>
       <Input
         id="rstep"
@@ -54,7 +82,7 @@ export function SettingsFields({
         onChange={(e) => num("revealStepPercent", e.target.value)}
       />
       <Label htmlFor="mcsec">
-        Multiple choice time limit in seconds (0 = off)
+        Option round time limit in seconds (0 = off)
       </Label>
       <Input
         id="mcsec"
@@ -63,7 +91,9 @@ export function SettingsFields({
         defaultValue={settings.mcSeconds}
         onChange={(e) => num("mcSeconds", e.target.value)}
       />
-      <label className="mt-2 flex items-center gap-2 text-sm">
+
+      <Section>Play</Section>
+      <label className="flex items-center gap-2 text-sm">
         <input
           type="checkbox"
           checked={settings.buzzHidesQuestion}

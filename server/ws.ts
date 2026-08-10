@@ -14,7 +14,6 @@ import {
   defaultSettings,
   hasOptions,
   picksOf,
-  samePicks,
 } from "../src/lib/game-types"
 
 type Room = {
@@ -437,34 +436,29 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         room.revealed = correctSet(q).every((i) =>
           room.revealedOptions.includes(i),
         )
-        const pay = (p: PlayerInfo, correct: boolean) => {
-          p.points += correct
-            ? room.settings.pointsCorrect
-            : room.settings.pointsWrong
-          if (correct) p.correct++
-          else p.wrong++
-        }
+        // a select-all tick is worth less than a whole answer, so the two types
+        // pay from different pairs
+        const [forRight, forWrong] =
+          q.type === "multi"
+            ? [
+                room.settings.multiPointsCorrect,
+                room.settings.multiPointsWrong,
+              ]
+            : [room.settings.pointsCorrect, room.settings.pointsWrong]
+        // one option at a time: flipping it pays everyone who ticked it.
         // paidOptions is what keeps an un-flip-and-re-flip (or a host reload)
-        // from paying the same answer twice — it only clears with the round
-        if (q.type === "multi") {
-          // all-or-nothing, so there is nothing to score until the last correct
-          // option is face-up and the room can see whose set was complete
-          const keyOut = q.correct.every((i) => room.revealedOptions.includes(i))
-          if (!keyOut || room.paidOptions.length > 0) break
-          room.paidOptions = q.options.map((_, i) => i)
-          for (const [pid, value] of Object.entries(room.answers)) {
-            const p = room.players.get(pid)
-            if (p) pay(p, samePicks(value, q.correct))
-          }
-          break
-        }
-        // one option at a time: flipping it pays everyone who picked it
+        // from paying the same option twice — it only clears with the round
         for (const i of room.revealedOptions) {
           if (room.paidOptions.includes(i)) continue
           room.paidOptions.push(i)
+          const correct = correctSet(q).includes(i)
           for (const [pid, value] of Object.entries(room.answers)) {
-            const p = Number(value) === i ? room.players.get(pid) : undefined
-            if (p) pay(p, i === q.correct)
+            if (!picksOf(value).includes(String(i))) continue
+            const p = room.players.get(pid)
+            if (!p) continue
+            p.points += correct ? forRight : forWrong
+            if (correct) p.correct++
+            else p.wrong++
           }
         }
         break

@@ -287,12 +287,15 @@ function CreatePage() {
                 them mid-game.
               </p>
               <div className="flex flex-col gap-2">
+                {/* spread over the defaults, not ?? — a collection saved
+                    before a setting existed has the object but not the key */}
                 <SettingsFields
-                  settings={selected.settings ?? defaultSettings}
+                  settings={{ ...defaultSettings, ...selected.settings }}
                   onChange={(patch) =>
                     updateSelected({
                       settings: {
-                        ...(selected.settings ?? defaultSettings),
+                        ...defaultSettings,
+                        ...selected.settings,
                         ...patch,
                       },
                     })

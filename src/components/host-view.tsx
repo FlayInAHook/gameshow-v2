@@ -449,7 +449,7 @@ function ActionsPanel({
             <div className="flex flex-col gap-2">
               <Label>
                 {q.type === "multi"
-                  ? `Flip the options face-up — everyone who picked exactly the ${correctSet(q).length} right ones scores, once the last of them is up`
+                  ? `Flip an option face-up — everyone who ticked it scores (${correctSet(q).length} of ${q.options.length} are right)`
                   : "Flip an option face-up — everyone who picked it scores"}
               </Label>
               {q.options.map((opt, i) => {
