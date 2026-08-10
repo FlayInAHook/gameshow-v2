@@ -9,6 +9,13 @@ export type Question =
       options: string[]
       correct: number
     })
+  // pick every right option, not just one. scored all-or-nothing: the set has
+  // to match exactly, so ticking everything is worth nothing
+  | (QuestionBase & {
+      type: "multi"
+      options: string[]
+      correct: number[]
+    })
   | (QuestionBase & { type: "buzz"; answer?: string })
   | (QuestionBase & { type: "free"; answer?: string })
   | (QuestionBase & {
@@ -22,6 +29,31 @@ export type Question =
     })
 
 export type QuestionType = Question["type"]
+
+// the two types that put options on the board and are answered by picking them
+export type OptionQuestion = Extract<Question, { type: "mc" | "multi" }>
+
+export function hasOptions(q: Question): q is OptionQuestion {
+  return q.type === "mc" || q.type === "multi"
+}
+
+export function correctSet(q: OptionQuestion): number[] {
+  return q.type === "mc" ? [q.correct] : q.correct
+}
+
+// an option answer travels as its indexes, comma-joined — a single-choice
+// answer is just the one-element case, so both types read the same way
+export function picksOf(value: string | undefined): string[] {
+  return value ? value.split(",") : []
+}
+
+export function samePicks(value: string | undefined, correct: number[]) {
+  const picks = picksOf(value)
+  return (
+    picks.length === correct.length &&
+    correct.every((i) => picks.includes(String(i)))
+  )
+}
 
 // settings ride along with the collection so a game can be set up once and
 // hosted the same way every time; the host can still change them mid-game
@@ -96,9 +128,9 @@ export type RoomState = {
   revealedAnswers: string[]
   // the answer key, but only once it is out: players never receive it in the
   // questions payload, so these are what their screen renders the verdict from.
-  // mc's correct option (null until flipped) and the answer text (null until
+  // the correct options among the flipped ones, and the answer text (null until
   // the host reveals it)
-  correctOption: number | null
+  correctOptions: number[]
   answerText: string | null
   // image-reveal progress 0..1
   reveal: number

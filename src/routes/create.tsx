@@ -16,7 +16,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { loadCollections, saveCollections } from "@/lib/store"
-import { defaultSettings } from "@/lib/game-types"
+import { defaultSettings, hasOptions } from "@/lib/game-types"
 import type {
   Collection,
   Question,
@@ -31,6 +31,7 @@ export const Route = createFileRoute("/create")({
 
 const typeLabels: Record<QuestionType, string> = {
   mc: "Multiple Choice",
+  multi: "Select All",
   buzz: "Buzz",
   free: "Free Input",
   reveal: "Image Reveal",
@@ -41,6 +42,8 @@ const allFilters: Array<RevealFilter> = ["zoom", "blur", "pixelate", "scramble"]
 function newQuestion(type: QuestionType): Question {
   const id = crypto.randomUUID()
   if (type === "mc") return { id, type, text: "", options: ["", ""], correct: 0 }
+  if (type === "multi")
+    return { id, type, text: "", options: ["", "", ""], correct: [] }
   if (type === "reveal")
     return {
       id,
@@ -66,11 +69,15 @@ Every question object has "id" (unique string), "type", "text" (the question its
 { "id": "q1", "type": "mc", "text": "...", "options": ["A", "B", "C", "D"], "correct": 0 }
 "correct" is the 0-based index into "options". At least 2 options.
 
+"multi" — select all, players pick every correct option and only score on the exact set:
+{ "id": "q2", "type": "multi", "text": "...", "options": ["A", "B", "C", "D", "E"], "correct": [0, 2] }
+"correct" is a list of 0-based indexes, at least 2 of them, and never all of the options. Write the text so it is clear that several answers are right.
+
 "buzz" — players buzz in, the host judges out loud:
-{ "id": "q2", "type": "buzz", "text": "...", "answer": "..." }
+{ "id": "q3", "type": "buzz", "text": "...", "answer": "..." }
 
 "free" — players type an answer, the host judges:
-{ "id": "q3", "type": "free", "text": "...", "answer": "..." }
+{ "id": "q4", "type": "free", "text": "...", "answer": "..." }
 
 "answer" is optional but include it — it is shown to the host when the round closes.
 
@@ -374,16 +381,39 @@ function CreatePage() {
                       />
                     </div>
                   )}
-                  {q.type === "mc" && (
+                  {hasOptions(q) && (
                     <div className="flex flex-col gap-2">
+                      {q.type === "multi" && (
+                        <p className="text-sm text-muted-foreground">
+                          Tick every correct option. Players have to pick the
+                          exact set to score.
+                        </p>
+                      )}
                       {q.options.map((opt, oi) => (
                         <div key={oi} className="flex items-center gap-2">
-                          <input
-                            type="radio"
-                            title="Correct answer"
-                            checked={q.correct === oi}
-                            onChange={() => updateQuestion(q.id, { correct: oi })}
-                          />
+                          {q.type === "mc" ? (
+                            <input
+                              type="radio"
+                              title="Correct answer"
+                              checked={q.correct === oi}
+                              onChange={() =>
+                                updateQuestion(q.id, { correct: oi })
+                              }
+                            />
+                          ) : (
+                            <input
+                              type="checkbox"
+                              title="One of the correct answers"
+                              checked={q.correct.includes(oi)}
+                              onChange={(e) =>
+                                updateQuestion(q.id, {
+                                  correct: e.target.checked
+                                    ? [...q.correct, oi].sort((a, b) => a - b)
+                                    : q.correct.filter((x) => x !== oi),
+                                })
+                              }
+                            />
+                          )}
                           <Input
                             placeholder={`Option ${oi + 1}`}
                             value={opt}
@@ -402,10 +432,20 @@ function CreatePage() {
                               onClick={() =>
                                 updateQuestion(q.id, {
                                   options: q.options.filter((_, j) => j !== oi),
-                                  correct:
-                                    q.correct >= oi && q.correct > 0
-                                      ? q.correct - 1
-                                      : q.correct,
+                                  // the key is index-based, so dropping an
+                                  // option shifts everything after it down
+                                  ...(q.type === "mc"
+                                    ? {
+                                        correct:
+                                          q.correct >= oi && q.correct > 0
+                                            ? q.correct - 1
+                                            : q.correct,
+                                      }
+                                    : {
+                                        correct: q.correct
+                                          .filter((x) => x !== oi)
+                                          .map((x) => (x > oi ? x - 1 : x)),
+                                      }),
                                 })
                               }
                             >
@@ -426,7 +466,7 @@ function CreatePage() {
                       </Button>
                     </div>
                   )}
-                  {q.type !== "mc" && (
+                  {!hasOptions(q) && (
                     <Input
                       placeholder="Answer (shown when the round is closed, optional)"
                       value={q.answer ?? ""}

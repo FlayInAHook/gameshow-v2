@@ -10,7 +10,11 @@ import type {
 import {
   MAX_ANSWER,
   WS_PORT,
+  correctSet,
   defaultSettings,
+  hasOptions,
+  picksOf,
+  samePicks,
 } from "../src/lib/game-types"
 
 type Room = {
@@ -70,11 +74,20 @@ function answersFor(room: Room, viewerId: string): Record<string, string> {
   const q = currentQuestion(room)
   const out: Record<string, string> = {}
   for (const [pid, value] of Object.entries(room.answers)) {
-    const shown =
-      q?.type === "mc"
-        ? room.revealedOptions.includes(Number(value))
-        : q?.type === "free" && room.revealedAnswers.includes(pid)
-    if (pid === viewerId || shown) out[pid] = value
+    if (pid === viewerId) {
+      out[pid] = value
+      continue
+    }
+    if (q && hasOptions(q)) {
+      // trimmed to the flipped options: on a select-all question the rest of
+      // someone's picks would otherwise ride along with the first flip
+      const shown = picksOf(value).filter((i) =>
+        room.revealedOptions.includes(Number(i)),
+      )
+      if (shown.length > 0) out[pid] = shown.join(",")
+    } else if (q?.type === "free" && room.revealedAnswers.includes(pid)) {
+      out[pid] = value
+    }
   }
   return out
 }
@@ -99,12 +112,12 @@ function stateOf(room: Room, viewerId?: string): RoomState {
     revealedAnswers: room.revealedAnswers,
     // the verdicts travel with the round instead of the question, so the
     // answer key never sits in a player's browser before it is revealed
-    correctOption:
-      q?.type === "mc" && room.revealedOptions.includes(q.correct)
-        ? q.correct
-        : null,
+    correctOptions:
+      q && hasOptions(q)
+        ? correctSet(q).filter((i) => room.revealedOptions.includes(i))
+        : [],
     answerText:
-      room.revealed && q && q.type !== "mc" ? (q.answer ?? null) : null,
+      room.revealed && q && !hasOptions(q) ? (q.answer ?? null) : null,
     reveal: room.reveal,
     timerLeft: room.timerLeft,
     questionAt: room.questionAt,
@@ -124,7 +137,9 @@ function questionsMsg(room: Room, full: boolean): string {
       : room.questions.map((q) =>
           q.type === "mc"
             ? { ...q, correct: -1 }
-            : { ...q, answer: undefined },
+            : q.type === "multi"
+              ? { ...q, correct: [] }
+              : { ...q, answer: undefined },
         ),
   } satisfies ServerMsg)
 }
@@ -152,11 +167,12 @@ function currentQuestion(room: Room): Question | undefined {
 }
 
 function closeRound(room: Room) {
-  const type = currentQuestion(room)?.type
+  const q = currentQuestion(room)
   room.locked = true
-  // mc and free stay face-down — the host flips options and reads answers out
-  // itself, so a close (or the timer running out) is only "pencils down"
-  room.revealed = type !== "mc" && type !== "free"
+  // option and free rounds stay face-down — the host flips options and reads
+  // answers out itself, so a close (or the timer running out) is only
+  // "pencils down". for them `revealed` means the answer key is fully out
+  room.revealed = q !== undefined && !hasOptions(q) && q.type !== "free"
   room.reveal = 1
   stopReveal(room)
   stopTimer(room)
@@ -413,25 +429,42 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         break
       case "revealOptions": {
         const q = currentQuestion(room)
-        if (q?.type !== "mc") break
+        if (!q || !hasOptions(q)) break
         room.revealedOptions = [
           ...new Set(a.indexes.filter((i) => i >= 0 && i < q.options.length)),
         ]
-        // flipping an option pays out everyone who picked it. paidOptions is
-        // what keeps an un-flip-and-re-flip (or a host reload) from paying the
-        // same answer twice — it only clears with the round
+        // the round counts as revealed once nothing of the key is left hidden
+        room.revealed = correctSet(q).every((i) =>
+          room.revealedOptions.includes(i),
+        )
+        const pay = (p: PlayerInfo, correct: boolean) => {
+          p.points += correct
+            ? room.settings.pointsCorrect
+            : room.settings.pointsWrong
+          if (correct) p.correct++
+          else p.wrong++
+        }
+        // paidOptions is what keeps an un-flip-and-re-flip (or a host reload)
+        // from paying the same answer twice — it only clears with the round
+        if (q.type === "multi") {
+          // all-or-nothing, so there is nothing to score until the last correct
+          // option is face-up and the room can see whose set was complete
+          const keyOut = q.correct.every((i) => room.revealedOptions.includes(i))
+          if (!keyOut || room.paidOptions.length > 0) break
+          room.paidOptions = q.options.map((_, i) => i)
+          for (const [pid, value] of Object.entries(room.answers)) {
+            const p = room.players.get(pid)
+            if (p) pay(p, samePicks(value, q.correct))
+          }
+          break
+        }
+        // one option at a time: flipping it pays everyone who picked it
         for (const i of room.revealedOptions) {
           if (room.paidOptions.includes(i)) continue
           room.paidOptions.push(i)
-          const correct = i === q.correct
           for (const [pid, value] of Object.entries(room.answers)) {
             const p = Number(value) === i ? room.players.get(pid) : undefined
-            if (!p) continue
-            p.points += correct
-              ? room.settings.pointsCorrect
-              : room.settings.pointsWrong
-            if (correct) p.correct++
-            else p.wrong++
+            if (p) pay(p, i === q.correct)
           }
         }
         break

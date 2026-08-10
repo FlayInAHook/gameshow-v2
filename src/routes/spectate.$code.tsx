@@ -9,7 +9,6 @@ import {
   VoteBubbles,
   medals,
   ranked,
-  solutionOut,
 } from "@/components/scoreboard"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -17,6 +16,7 @@ import { Label } from "@/components/ui/label"
 import { initAudio, sounds } from "@/lib/sounds"
 import { useRoom } from "@/lib/use-room"
 import { cn } from "@/lib/utils"
+import { correctSet, hasOptions, picksOf, samePicks } from "@/lib/game-types"
 import type { Question, RoomState } from "@/lib/game-types"
 
 export const Route = createFileRoute("/spectate/$code")({
@@ -142,13 +142,13 @@ function Stage({ state, q }: { state: RoomState; q: Question | null }) {
           />
         ))}
 
-      {q.type === "mc" && (
+      {hasOptions(q) && (
         <div className="grid w-full max-w-3xl grid-cols-1 gap-3 sm:grid-cols-2">
           {q.options.map((opt, i) => (
             <div key={i} className="flex min-w-0 flex-col gap-1">
               <McOption
                 option={opt}
-                correct={i === q.correct}
+                correct={correctSet(q).includes(i)}
                 shown={state.revealedOptions.includes(i)}
               />
               {/* the spectate link is the host's own second screen, so the
@@ -159,7 +159,7 @@ function Stage({ state, q }: { state: RoomState; q: Question | null }) {
         </div>
       )}
 
-      {(q.type === "mc" || q.type === "free") && (
+      {(hasOptions(q) || q.type === "free") && (
         <p className="text-sm text-muted-foreground tabular-nums">
           {answerCount} / {state.players.length} answered
         </p>
@@ -176,7 +176,7 @@ function Stage({ state, q }: { state: RoomState; q: Question | null }) {
       )}
       {state.locked && (
         <Badge variant="secondary">
-          {solutionOut(state, q)
+          {state.revealed
             ? "Round closed"
             : "Answers locked — waiting for the reveal"}
         </Badge>
@@ -278,9 +278,9 @@ function LiveAnswers({ state, q }: { state: RoomState; q: Question | null }) {
       )}
       {state.players.map((p) => {
         const value = state.answers[p.id]
-        const mcCorrect =
-          value !== undefined && q.type === "mc"
-            ? Number(value) === q.correct
+        const picked =
+          value !== undefined && hasOptions(q)
+            ? samePicks(value, correctSet(q))
             : null
         return (
           <div
@@ -300,11 +300,15 @@ function LiveAnswers({ state, q }: { state: RoomState; q: Question | null }) {
                 className={cn(
                   "mt-1 border-l-2 border-muted-foreground/40 pl-2 wrap-anywhere text-muted-foreground",
                   // this screen is the host's, so it doesn't wait on the reveal
-                  mcCorrect === true && "text-green-600",
-                  mcCorrect === false && "text-red-600",
+                  picked === true && "text-green-600",
+                  picked === false && "text-red-600",
                 )}
               >
-                {q.type === "mc" ? q.options[Number(value)] : value}
+                {hasOptions(q)
+                  ? picksOf(value)
+                      .map((i) => q.options[Number(i)])
+                      .join(", ")
+                  : value}
               </div>
             )}
           </div>

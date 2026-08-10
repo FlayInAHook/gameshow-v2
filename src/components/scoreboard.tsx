@@ -1,19 +1,13 @@
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import type { Question, RoomState } from "@/lib/game-types"
+import { picksOf } from "@/lib/game-types"
+import type { RoomState } from "@/lib/game-types"
 
 // shared by the room (host/player) and the spectate screen
 
-// is the question's own answer out yet? mc gives it away by flipping the
-// correct option, the other types by the host revealing it. both come off the
-// round state, which is the only place a player's browser ever sees them
-export function solutionOut(state: RoomState, q: Question) {
-  return q.type === "mc" ? state.correctOption !== null : state.revealed
-}
-
-// who picked this mc option. the caller decides when it is safe to show —
-// player screens wait for the round to lock, or everyone just copies whoever
+// who picked this option. the caller decides when it is safe to show — player
+// screens wait for the host to flip it, or everyone just copies whoever
 // commits first
 export function VoteBubbles({
   state,
@@ -24,7 +18,9 @@ export function VoteBubbles({
   option: number
   meId?: string
 }) {
-  const who = state.players.filter((p) => state.answers[p.id] === String(option))
+  const who = state.players.filter((p) =>
+    picksOf(state.answers[p.id]).includes(String(option)),
+  )
   if (who.length === 0) return null
   return (
     <div className="flex flex-wrap gap-1">

@@ -38,6 +38,7 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable"
 import { cn } from "@/lib/utils"
+import { correctSet, hasOptions } from "@/lib/game-types"
 import type {
   HostAction,
   Question,
@@ -296,6 +297,7 @@ function CopyRow({ label, url }: { label: string; url: string }) {
 
 const typeBadge: Record<Question["type"], string> = {
   mc: "MC",
+  multi: "Multi",
   buzz: "Buzz",
   free: "Free",
   reveal: "Reveal",
@@ -443,35 +445,40 @@ function ActionsPanel({
       {q ? (
         <>
           <p className="text-xl font-semibold">{q.text}</p>
-          {q.type === "mc" && (
+          {hasOptions(q) && (
             <div className="flex flex-col gap-2">
               <Label>
-                Flip an option face-up — everyone who picked it scores
+                {q.type === "multi"
+                  ? `Flip the options face-up — everyone who picked exactly the ${correctSet(q).length} right ones scores, once the last of them is up`
+                  : "Flip an option face-up — everyone who picked it scores"}
               </Label>
-              {q.options.map((opt, i) => (
-                <div key={i} className="flex flex-col gap-1">
-                  <McOption
-                    option={opt}
-                    correct={i === q.correct}
-                    shown={state.revealedOptions.includes(i)}
-                    hint={
-                      i === q.correct && (
-                        <Check
-                          className={cn(
-                            "size-5",
-                            state.revealedOptions.includes(i)
-                              ? "text-white"
-                              : "text-green-600",
-                          )}
-                          aria-label="Correct option"
-                        />
-                      )
-                    }
-                    onClick={() => flipOption(i, i === q.correct)}
-                  />
-                  <VoteBubbles state={state} option={i} />
-                </div>
-              ))}
+              {q.options.map((opt, i) => {
+                const isCorrect = correctSet(q).includes(i)
+                return (
+                  <div key={i} className="flex flex-col gap-1">
+                    <McOption
+                      option={opt}
+                      correct={isCorrect}
+                      shown={state.revealedOptions.includes(i)}
+                      hint={
+                        isCorrect && (
+                          <Check
+                            className={cn(
+                              "size-5",
+                              state.revealedOptions.includes(i)
+                                ? "text-white"
+                                : "text-green-600",
+                            )}
+                            aria-label="Correct option"
+                          />
+                        )
+                      }
+                      onClick={() => flipOption(i, isCorrect)}
+                    />
+                    <VoteBubbles state={state} option={i} />
+                  </div>
+                )
+              })}
               <div className="flex gap-2">
                 <Button
                   variant="outline"
@@ -495,7 +502,7 @@ function ActionsPanel({
               </div>
             </div>
           )}
-          {q.type !== "mc" && q.answer && (
+          {!hasOptions(q) && q.answer && (
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm text-muted-foreground">Answer: {q.answer}</p>
               {/* buzz and reveal rounds put the answer up when they close;
@@ -560,7 +567,7 @@ function ActionsPanel({
             </div>
           )}
 
-          {q.type === "mc" && state.settings.mcSeconds > 0 && (
+          {hasOptions(q) && state.settings.mcSeconds > 0 && (
             <div className="flex items-center gap-3">
               <Button
                 disabled={state.timerLeft !== null}
@@ -604,9 +611,9 @@ function ActionsPanel({
             </div>
           )}
 
-          {/* mc has no answer list: the vote bubbles under each option are the
-              same information, and flipping an option scores it */}
-          {q.type !== "mc" && Object.keys(state.answers).length > 0 && (
+          {/* option rounds have no answer list: the vote bubbles under each
+              option are the same information, and flipping scores it */}
+          {!hasOptions(q) && Object.keys(state.answers).length > 0 && (
             <div className="flex flex-col gap-2">
               <Label>
                 {q.type === "free"
@@ -694,7 +701,7 @@ function ActionsPanel({
             <Button variant="outline" onClick={() => act({ kind: "reset" })}>
               <RotateCcw /> Reset round
             </Button>
-            {q.type === "mc" && (
+            {hasOptions(q) && (
               <Button
                 variant="outline"
                 title="Close the round and flip every option at once — scores everyone, no suspense"

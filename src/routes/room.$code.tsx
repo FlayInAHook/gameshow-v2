@@ -8,7 +8,6 @@ import {
   Leaderboard,
   McOption,
   VoteBubbles,
-  solutionOut,
 } from "@/components/scoreboard"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -24,7 +23,7 @@ import {
 } from "@/lib/store"
 import { useRoom } from "@/lib/use-room"
 import { cn } from "@/lib/utils"
-import { MAX_ANSWER } from "@/lib/game-types"
+import { MAX_ANSWER, hasOptions, picksOf } from "@/lib/game-types"
 import type {
   ClientMsg,
   HostAction,
@@ -191,9 +190,25 @@ function PlayerView({
       ? (questions[state.currentIndex] ?? null)
       : null
   const myAnswer = state.answers[playerId]
+  const myPicks = picksOf(myAnswer)
   const myBuzzIndex = state.buzzes.findIndex((b) => b.playerId === playerId)
   const [freeText, setFreeText] = useState("")
   const buzzable = q?.type === "buzz" || q?.type === "reveal"
+  // multiple choice replaces the pick, select-all toggles it in and out of the
+  // set — either way the whole answer goes back to the server
+  const pick = (i: string) =>
+    send({
+      type: "answer",
+      value:
+        q?.type !== "multi"
+          ? i
+          : (myPicks.includes(i)
+              ? myPicks.filter((x) => x !== i)
+              : [...myPicks, i]
+            )
+              .sort((a, b) => Number(a) - Number(b))
+              .join(","),
+    })
   // keeps the rest of the room from reading on while the host judges the buzz
   const hideQuestion =
     state.settings.buzzHidesQuestion && state.buzzes.length > 0
@@ -298,31 +313,36 @@ function PlayerView({
             </>
           )}
 
-          {q.type === "mc" && (
-            <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
-              {q.options.map((opt, i) => (
-                <div key={i} className="flex min-w-0 flex-col gap-1">
-                  <McOption
-                    option={opt}
-                    // from the round, not the question: q.correct never
-                    // reaches a player's browser
-                    correct={i === state.correctOption}
-                    shown={state.revealedOptions.includes(i)}
-                    mine={myAnswer === String(i)}
-                    onClick={
-                      state.locked
-                        ? undefined
-                        : () => send({ type: "answer", value: String(i) })
-                    }
-                  />
-                  {/* only under options the host has flipped, so the reveal
-                      hands out the votes one option at a time */}
-                  {state.revealedOptions.includes(i) && (
-                    <VoteBubbles state={state} option={i} meId={playerId} />
-                  )}
-                </div>
-              ))}
-            </div>
+          {hasOptions(q) && (
+            <>
+              {q.type === "multi" && (
+                <p className="text-sm text-muted-foreground">
+                  Pick every correct option — the whole set has to be right.
+                </p>
+              )}
+              <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
+                {q.options.map((opt, i) => (
+                  <div key={i} className="flex min-w-0 flex-col gap-1">
+                    <McOption
+                      option={opt}
+                      // from the round, not the question: the answer key never
+                      // reaches a player's browser
+                      correct={state.correctOptions.includes(i)}
+                      shown={state.revealedOptions.includes(i)}
+                      mine={myPicks.includes(String(i))}
+                      onClick={
+                        state.locked ? undefined : () => pick(String(i))
+                      }
+                    />
+                    {/* only under options the host has flipped, so the reveal
+                        hands out the votes one option at a time */}
+                    {state.revealedOptions.includes(i) && (
+                      <VoteBubbles state={state} option={i} meId={playerId} />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
           )}
 
           {buzzable && (
@@ -402,7 +422,7 @@ function PlayerView({
           )}
           {state.locked && (
             <Badge variant="secondary">
-              {solutionOut(state, q)
+              {state.revealed
                 ? "Round closed"
                 : "Answers locked — waiting for the reveal"}
             </Badge>

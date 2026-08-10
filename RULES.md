@@ -26,13 +26,19 @@ feel like a reveal rather than a scoreboard update.
 | Type | Players do | Host does | Scored by |
 |---|---|---|---|
 | **Multiple choice** | tap an option | flip options face-up | the app, on flip |
+| **Select all** | tap every option they want | flip options face-up | the app, on the last correct flip |
 | **Buzz** | hit BUZZ / space | judge out loud | host, per buzzer |
 | **Free input** | type an answer (200 chars) | read answers out, then the solution | host, per answer |
 | **Image reveal** | watch, then BUZZ | run the reveal, judge | host, per buzzer |
 
-- **Multiple choice** is the only self-scoring type: flipping an option pays
-  everyone who picked it, once per option per round. Un-flipping does not take
-  the points back — fix mistakes with the ± buttons in the players panel.
+- **Multiple choice** and **select all** score themselves. Multiple choice pays
+  everyone who picked an option the moment it is flipped, once per option per
+  round. Un-flipping does not take the points back — fix mistakes with the ±
+  buttons in the players panel.
+- **Select all** is all-or-nothing: the picked set has to match the key
+  exactly, so ticking every box is worth nothing. Nothing is scored until the
+  last correct option is face-up, because until then nobody can see whose set
+  was complete — which makes that final flip the moment of the round.
 - **Free input** is never auto-scored. Typos, synonyms and wrong-but-funny
   answers are yours to rule on.
 - **Buzz** and **image reveal** are the only types with the wrong-answer bonus
@@ -110,6 +116,9 @@ nothing, so the ceremony is unchanged.
   wrap into a wall.
 - **Write four options, not two.** Two options is a coin flip that pays full
   points.
+- **Select all wants five or six options and two or three right ones.** Fewer
+  than that and guessing the whole set is easy; make every option correct and
+  the question answers itself.
 - **One line per question.** Long text pushes the answer buttons off a phone
   screen.
 - **Shrink images before uploading.** They live in your browser's local storage
