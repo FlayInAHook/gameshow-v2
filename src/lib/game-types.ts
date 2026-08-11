@@ -16,6 +16,23 @@ export type Question =
       options: string[]
       correct: number[]
     })
+  // put the items in order by some criterion. `items` is deliberately not the
+  // answer — the order lives in `correct`, which players never receive
+  | (QuestionBase & {
+      type: "sort"
+      items: string[]
+      // item indexes, top to bottom in the true order
+      correct: number[]
+      // parallel to items: the birth year, the population… shown for the
+      // anchor up front and for every item as its slot is revealed
+      values?: string[]
+      // the item whose value is given away from the start, as a scale to
+      // reason against
+      anchor?: number
+      // hard anchor: it also sits locked in its true slot, so the split above
+      // and below is given too
+      anchorLocked?: boolean
+    })
   | (QuestionBase & { type: "buzz"; answer?: string })
   | (QuestionBase & { type: "free"; answer?: string })
   | (QuestionBase & {
@@ -37,6 +54,13 @@ export function hasOptions(q: Question): q is OptionQuestion {
   return q.type === "mc" || q.type === "multi"
 }
 
+// the types whose answer is a line of text the host reveals at the end
+export function hasAnswerText(
+  q: Question,
+): q is Extract<Question, { type: "buzz" | "free" | "reveal" }> {
+  return q.type === "buzz" || q.type === "free" || q.type === "reveal"
+}
+
 export function correctSet(q: OptionQuestion): number[] {
   return q.type === "mc" ? [q.correct] : q.correct
 }
@@ -45,6 +69,73 @@ export function correctSet(q: OptionQuestion): number[] {
 // answer is just the one-element case, so both types read the same way
 export function picksOf(value: string | undefined): string[] {
   return value ? value.split(",") : []
+}
+
+export type SortQuestion = Extract<Question, { type: "sort" }>
+
+// a hard anchor is placed for the player, so it is not theirs to get right —
+// it stays out of the scoring entirely
+export function scoredItems(q: SortQuestion): number[] {
+  const locked = q.anchorLocked && q.anchor !== undefined ? q.anchor : -1
+  return q.correct.filter((item) => item !== locked)
+}
+
+// where each item sits on the player's board; missing = still in the pool
+export function placedAt(value: string | undefined): Map<number, number> {
+  const out = new Map<number, number>()
+  picksOf(value).forEach((raw, slot) => {
+    if (raw !== "") out.set(Number(raw), slot)
+  })
+  return out
+}
+
+/**
+ * What a sorted answer is worth.
+ *
+ * Pairs, not positions: an item in the wrong place should not read the same as
+ * a shuffle, and every positional measure (deviation and friends) scores those
+ * two identically. Chance-corrected so a shuffle is worth nothing, square-rooted
+ * so partial knowledge still pays, and floored at the value of the slots placed
+ * exactly right so a correct placement always counts for something.
+ */
+export function scoreSort(
+  q: SortQuestion,
+  value: string | undefined,
+  points: number,
+): number {
+  const items = scoredItems(q)
+  const n = items.length
+  if (n === 0) return 0
+  const truePos = new Map(q.correct.map((item, slot) => [item, slot]))
+  const playerPos = placedAt(value)
+
+  let exact = 0
+  for (const item of items)
+    if (playerPos.get(item) === truePos.get(item)) exact++
+
+  // pairs involving an unplaced item are neither right nor wrong, but they
+  // still count against the total — placing only what you know pays less
+  let net = 0
+  for (let a = 0; a < n; a++)
+    for (let b = a + 1; b < n; b++) {
+      const pa = playerPos.get(items[a])
+      const pb = playerPos.get(items[b])
+      if (pa === undefined || pb === undefined) continue
+      const trueWay = truePos.get(items[a])! < truePos.get(items[b])!
+      net += trueWay === pa < pb ? 1 : -1
+    }
+  const tau = n > 1 ? net / ((n * (n - 1)) / 2) : 1
+
+  const curve = points * Math.sqrt(Math.max(0, tau))
+  const floor = (exact * points) / n
+  const total = Math.max(curve, floor)
+  // the whole round is tallied before anything is rounded, and then it rounds
+  // down unless it is within a quarter point — a lucky slot shouldn't round
+  // its way up to a point it didn't earn
+  const rounded =
+    total - Math.floor(total) >= 0.75 ? Math.ceil(total) : Math.floor(total)
+  // the bonus keeps a flawless order strictly better than a near miss
+  return rounded + (exact === n ? 1 : 0)
 }
 
 export function samePicks(value: string | undefined, correct: number[]) {
@@ -73,6 +164,9 @@ export type Settings = {
   // so a half-right answer is worth something and a scattergun costs
   multiPointsCorrect: number
   multiPointsWrong: number
+  // what a flawless sort pays, whatever the item count; a near miss gets a
+  // share of it, and a flawless one gets one more on top
+  sortPoints: number
   // how far one "Step reveal" press uncovers, in percent
   revealStepPercent: number
   // once someone buzzes, players stop seeing the question and its image
@@ -90,11 +184,12 @@ export const defaultSettings: Settings = {
   pointsWrongOthers: 1,
   multiPointsCorrect: 1,
   multiPointsWrong: -1,
+  sortPoints: 5,
   revealStepPercent: 5,
   // a buzzed question stays on the buzzer's screen, not everyone's — the room
   // waits for the verdict instead of reading on
   buzzHidesQuestion: true,
-  mcSeconds: 0,
+  mcSeconds: 30,
   friendsBuzz: true,
 }
 
@@ -138,6 +233,11 @@ export type RoomState = {
   // the host reveals it)
   correctOptions: number[]
   answerText: string | null
+  // sort rounds: which item belongs in each slot, filled in as the host flips
+  // them (null = still face down), and the values that have been given away —
+  // the anchor's from the start, the rest as their slot turns over
+  revealedOrder: (number | null)[]
+  shownValues: Record<number, string | undefined>
   // image-reveal progress 0..1
   reveal: number
   // seconds left on the round timer, counted down by the server; null = no timer

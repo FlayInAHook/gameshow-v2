@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { Link, createFileRoute } from "@tanstack/react-router"
 import { HostView } from "@/components/host-view"
 import { RevealImage } from "@/components/reveal-image"
+import { SortBoard } from "@/components/sort-board"
 import {
   AnswerBubbles,
   ConnectionDot,
@@ -347,6 +348,24 @@ function PlayerView({
                   </div>
                 ))}
               </div>
+            </>
+          )}
+
+          {q.type === "sort" && (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Put them in order — drag, or tap and use the arrows.
+              </p>
+              <SortBoard
+                q={q}
+                state={state}
+                value={myAnswer}
+                onChange={
+                  state.locked
+                    ? undefined
+                    : (next) => send({ type: "answer", value: next })
+                }
+              />
             </>
           )}
 

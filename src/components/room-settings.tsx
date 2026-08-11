@@ -71,6 +71,18 @@ export function SettingsFields({
         onChange={(e) => num("multiPointsWrong", e.target.value)}
       />
 
+      <Section>Sorting rounds</Section>
+      <Label htmlFor="sortpts">
+        Points for a flawless sort (a near miss gets a share, a flawless one
+        gets one more)
+      </Label>
+      <Input
+        id="sortpts"
+        type="number"
+        defaultValue={settings.sortPoints}
+        onChange={(e) => num("sortPoints", e.target.value)}
+      />
+
       <Section>Rounds</Section>
       <Label htmlFor="rstep">Reveal step size (%)</Label>
       <Input

@@ -14,6 +14,7 @@ import {
   defaultSettings,
   hasOptions,
   picksOf,
+  scoreSort,
 } from "../src/lib/game-types"
 
 type Room = {
@@ -94,6 +95,27 @@ function answersFor(room: Room, viewerId: string): Record<string, string> {
 // viewerId marks a player's own view. host and spectators (no viewerId) see the
 // room as it really is; a player only ever receives what has been revealed, so
 // there is nothing to read ahead in devtools
+// the item list is what players see, so it must not be the answer. shuffling
+// once when the room is made means the creator can type them in order and the
+// board still comes up scrambled — differently every game
+function shuffleSort(q: Question): Question {
+  if (q.type !== "sort") return q
+  const order = q.items.map((_, i) => i)
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[order[i], order[j]] = [order[j], order[i]]
+  }
+  // order[newIndex] = oldIndex, so this inverts it for remapping references
+  const moved = new Map(order.map((old, next) => [old, next]))
+  return {
+    ...q,
+    items: order.map((old) => q.items[old]),
+    values: q.values && order.map((old) => q.values?.[old] ?? ""),
+    correct: q.correct.map((old) => moved.get(old) ?? 0),
+    anchor: q.anchor === undefined ? undefined : moved.get(q.anchor),
+  }
+}
+
 function stateOf(room: Room, viewerId?: string): RoomState {
   const q = currentQuestion(room)
   return {
@@ -116,7 +138,32 @@ function stateOf(room: Room, viewerId?: string): RoomState {
         ? correctSet(q).filter((i) => room.revealedOptions.includes(i))
         : [],
     answerText:
-      room.revealed && q && !hasOptions(q) ? (q.answer ?? null) : null,
+      room.revealed && q && !hasOptions(q) && q.type !== "sort"
+        ? (q.answer ?? null)
+        : null,
+    // revealedOptions carries the flipped slot numbers on a sort round
+    revealedOrder:
+      q?.type === "sort"
+        ? q.correct.map((item, slot) =>
+            // a hard anchor is on the board from the start, so its slot counts
+            // as revealed straight away
+            room.revealedOptions.includes(slot) ||
+            (q.anchorLocked && item === q.anchor)
+              ? item
+              : null,
+          )
+        : [],
+    shownValues:
+      q?.type === "sort"
+        ? Object.fromEntries(
+            q.correct.flatMap((item, slot) =>
+              (room.revealedOptions.includes(slot) || item === q.anchor) &&
+              q.values?.[item]
+                ? [[item, q.values[item]]]
+                : [],
+            ),
+          )
+        : {},
     reveal: room.reveal,
     timerLeft: room.timerLeft,
     questionAt: room.questionAt,
@@ -138,7 +185,11 @@ function questionsMsg(room: Room, full: boolean): string {
             ? { ...q, correct: -1 }
             : q.type === "multi"
               ? { ...q, correct: [] }
-              : { ...q, answer: undefined },
+              : q.type === "sort"
+                ? // the order is the answer, and so are the values — both
+                  // reach players through the round state instead
+                  { ...q, correct: [], values: undefined }
+                : { ...q, answer: undefined },
         ),
   } satisfies ServerMsg)
 }
@@ -259,7 +310,7 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
     }
     room.hostConnected = true
     room.collectionName = msg.collectionName
-    room.questions = msg.questions
+    room.questions = msg.questions.map(shuffleSort)
     ws.data = { playerId: msg.playerId, code: msg.code }
     sockets.set(msg.playerId, ws)
     ws.subscribe(msg.code)
@@ -428,6 +479,27 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         break
       case "revealOptions": {
         const q = currentQuestion(room)
+        if (q?.type === "sort") {
+          // the indexes are slots here, and the whole order has to be out
+          // before anything can be scored — the answer is the arrangement
+          room.revealedOptions = [
+            ...new Set(a.indexes.filter((i) => i >= 0 && i < q.items.length)),
+          ]
+          room.revealed = room.revealedOptions.length === q.items.length
+          if (!room.revealed || room.paidOptions.length > 0) break
+          room.paidOptions = q.items.map((_, i) => i)
+          for (const [pid, value] of Object.entries(room.answers)) {
+            const p = room.players.get(pid)
+            if (!p) continue
+            const won = scoreSort(q, value, room.settings.sortPoints)
+            p.points += won
+            // a sort is one answer however many slots it has, so it counts
+            // once on the leaderboard tally
+            if (won > 0) p.correct++
+            else p.wrong++
+          }
+          break
+        }
         if (!q || !hasOptions(q)) break
         room.revealedOptions = [
           ...new Set(a.indexes.filter((i) => i >= 0 && i < q.options.length)),

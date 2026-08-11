@@ -38,7 +38,13 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable"
 import { cn } from "@/lib/utils"
-import { correctSet, hasOptions } from "@/lib/game-types"
+import {
+  correctSet,
+  hasAnswerText,
+  hasOptions,
+  placedAt,
+  scoreSort,
+} from "@/lib/game-types"
 import type {
   HostAction,
   Question,
@@ -298,6 +304,7 @@ function CopyRow({ label, url }: { label: string; url: string }) {
 const typeBadge: Record<Question["type"], string> = {
   mc: "MC",
   multi: "Multi",
+  sort: "Sort",
   buzz: "Buzz",
   free: "Free",
   reveal: "Reveal",
@@ -502,7 +509,73 @@ function ActionsPanel({
               </div>
             </div>
           )}
-          {!hasOptions(q) && q.answer && (
+          {q.type === "sort" && (
+            <div className="flex flex-col gap-2">
+              <Label>
+                Flip a slot face-up — the round scores once the whole order is
+                out
+              </Label>
+              {q.correct.map((item, slot) => {
+                const shown = state.revealedOptions.includes(slot)
+                return (
+                  <button
+                    key={slot}
+                    onClick={() =>
+                      act({
+                        kind: "revealOptions",
+                        indexes: shown
+                          ? state.revealedOptions.filter((x) => x !== slot)
+                          : [...state.revealedOptions, slot],
+                      })
+                    }
+                    className={cn(
+                      "flex items-center gap-2 rounded-lg border p-2 text-left transition-colors hover:bg-muted",
+                      shown &&
+                        "border-2 border-green-500 bg-green-500/10 dark:border-green-400 dark:bg-green-500/15",
+                    )}
+                  >
+                    <span className="w-5 shrink-0 text-center text-sm font-bold text-muted-foreground tabular-nums">
+                      {slot + 1}
+                    </span>
+                    <span className="min-w-0 flex-1 wrap-anywhere">
+                      {q.items[item]}
+                    </span>
+                    {q.values?.[item] && (
+                      <Badge variant="secondary">{q.values[item]}</Badge>
+                    )}
+                    {item === q.anchor && (
+                      <Badge variant="outline">
+                        {q.anchorLocked ? "anchor, locked" : "anchor"}
+                      </Badge>
+                    )}
+                    {shown ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
+                  </button>
+                )
+              })}
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    act({
+                      kind: "revealOptions",
+                      indexes: q.items.map((_, i) => i),
+                    })
+                  }
+                >
+                  <Eye /> Flip all — scores the round
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => act({ kind: "revealOptions", indexes: [] })}
+                >
+                  <EyeOff /> Face down
+                </Button>
+              </div>
+            </div>
+          )}
+          {hasAnswerText(q) && q.answer && (
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm text-muted-foreground">Answer: {q.answer}</p>
               {/* buzz and reveal rounds put the answer up when they close;
@@ -611,9 +684,46 @@ function ActionsPanel({
             </div>
           )}
 
+          {q.type === "sort" && Object.keys(state.answers).length > 0 && (
+            <div className="flex flex-col gap-2">
+              <Label>Arrangements — points are what the flip will pay</Label>
+              {Object.entries(state.answers).map(([pid, value]) => {
+                const pos = placedAt(value)
+                return (
+                  <div key={pid} className="rounded-lg border p-2">
+                    <div className="flex items-center gap-2">
+                      <span className="min-w-0 flex-1 truncate font-semibold">
+                        {playerName(pid)}
+                      </span>
+                      <Badge variant="secondary">
+                        {scoreSort(q, value, state.settings.sortPoints)} pts
+                      </Badge>
+                    </div>
+                    <ol className="mt-1 flex flex-wrap gap-x-2 text-sm text-muted-foreground">
+                      {q.correct.map((_, slot) => {
+                        const item = [...pos].find(([, s]) => s === slot)?.[0]
+                        if (item === undefined) return null
+                        return (
+                          <li
+                            key={slot}
+                            className={cn(
+                              q.correct[slot] === item && "text-green-600",
+                            )}
+                          >
+                            {slot + 1}. {q.items[item]}
+                          </li>
+                        )
+                      })}
+                    </ol>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
           {/* option rounds have no answer list: the vote bubbles under each
               option are the same information, and flipping scores it */}
-          {!hasOptions(q) && Object.keys(state.answers).length > 0 && (
+          {hasAnswerText(q) && Object.keys(state.answers).length > 0 && (
             <div className="flex flex-col gap-2">
               <Label>
                 {q.type === "free"

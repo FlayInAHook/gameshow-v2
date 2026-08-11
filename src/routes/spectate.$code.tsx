@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react"
 import { Link, createFileRoute } from "@tanstack/react-router"
 import { RevealImage } from "@/components/reveal-image"
+import { SortBoard } from "@/components/sort-board"
 import {
   AnswerBubbles,
   ConnectionDot,
@@ -159,6 +160,12 @@ function Stage({ state, q }: { state: RoomState; q: Question | null }) {
         </div>
       )}
 
+      {q.type === "sort" && (
+        <div className="w-full max-w-2xl">
+          <SortBoard q={q} state={state} value={undefined} />
+        </div>
+      )}
+
       {(hasOptions(q) || q.type === "free") && (
         <p className="text-sm text-muted-foreground tabular-nums">
           {answerCount} / {state.players.length} answered
@@ -308,7 +315,13 @@ function LiveAnswers({ state, q }: { state: RoomState; q: Question | null }) {
                   ? picksOf(value)
                       .map((i) => q.options[Number(i)])
                       .join(", ")
-                  : value}
+                  : q.type === "sort"
+                    ? picksOf(value)
+                        .map((i, slot) =>
+                          i === "" ? "—" : `${slot + 1}. ${q.items[Number(i)]}`,
+                        )
+                        .join("  ")
+                    : value}
               </div>
             )}
           </div>

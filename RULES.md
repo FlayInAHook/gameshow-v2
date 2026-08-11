@@ -27,6 +27,7 @@ feel like a reveal rather than a scoreboard update.
 |---|---|---|---|
 | **Multiple choice** | tap an option | flip options face-up | the app, on flip |
 | **Select all** | tick every option they want | flip options face-up | the app, on each flip |
+| **Sorting** | drag or tap items into order | flip the slots face-up | the app, on the last slot |
 | **Buzz** | hit BUZZ / space | judge out loud | host, per buzzer |
 | **Free input** | type an answer (200 chars) | read answers out, then the solution | host, per answer |
 | **Image reveal** | watch, then BUZZ | run the reveal, judge | host, per buzzer |
@@ -42,6 +43,12 @@ feel like a reveal rather than a scoreboard update.
   fell for it, which is its own moment.
 - **Free input** is never auto-scored. Typos, synonyms and wrong-but-funny
   answers are yours to rule on.
+- **Sorting** asks for an order — oldest to newest, biggest to smallest. One
+  item can be an **anchor**: its value is given away up front as a scale to
+  reason against. A *hard* anchor also sits locked in its true slot, which
+  hands over the split above and below as well — save that for a criterion
+  nobody has a feel for. Nothing scores until the whole order is face-up, so
+  flipping the slots one at a time is the round's whole reveal.
 - **Buzz** and **image reveal** are the only types with the wrong-answer bonus
   (below), because they are the only ones where answering is a *decision*.
 - **Image reveal** either uncovers itself over its timer (30s by default, in 20
@@ -84,6 +91,34 @@ shape of the question, not the settings, is what stops the scattergun:
 many decoys as answers means ticking the lot is worth nothing, and knowing
 which is which is the only way to score.
 
+### Sorting, and why six items
+
+A sort is scored on **pairs, not positions**: how many of the item-vs-item
+orderings you got right, corrected so a shuffle is worth zero and curved so a
+near miss still pays. On top of that, every item you place in exactly the right
+slot banks its share of the round (a seventh of it, at seven items) whatever the
+rest looks like. Whichever is higher is what you score.
+
+The whole round is tallied before anything is rounded, and then it rounds
+**down** unless it is within a quarter of a point — so a single lucky slot can't
+round its way up to a point it didn't earn. A flawless order gets one more on
+top, which is the only way to score above the round's value.
+
+The catch is that a random shuffle contains one exactly-right item on average —
+that's a fixed property of permutations — so luck always banks something. With
+few items that is a big slice of the round:
+
+| Items | A shuffle averages | Everything right but one item | One adjacent swap |
+|---|---|---|---|
+| 5 | 1.6 of 5 | 2 | 4 |
+| 6 | 1.4 of 5 | 3 | 4 |
+| **7** | **1.2 of 5** | 3 | 5 |
+| 8 | 1.1 of 5 | 3 | 5 |
+
+**Rule of thumb: seven items.** At five, knowing almost the whole order (2) is
+barely worth more than shuffling (1.6), which defeats the point; seven is where
+skill pays most and luck pays least.
+
 ### Guessing on multiple choice
 
 With wrong worth 0, a blind guess on four options is worth +0.75 and costs
@@ -110,8 +145,9 @@ tally, so use them for corrections and prizes.
 | Points to everyone else on a wrong buzz | 1 | nobody buzzes → 2–3; pure reflex round → 0 |
 | Select all: per correct tick | 1 | a select-all-heavy set should stay level with the other types |
 | Select all: per wrong tick | −1 | never above −1 unless you want the scattergun to pay |
+| Sorting: flawless sort | 5 | it costs a minute of fiddling, so it should outpay a tap |
 | Reveal step size | 5% | big obvious images → 10%; cruel ones → 2–3% |
-| Multiple choice time limit | 0 (off) | the room stalls → 20–30s |
+| Option round time limit | 30s | a set of long or wordy options → 45s; no clock at all → 0 |
 | Buzzing hides the question | on | a long question needs re-reading → off |
 | Buzz calculations: friends mode | on | see fairness, below |
 
@@ -134,6 +170,10 @@ nothing, so the ceremony is unchanged.
   wrap into a wall.
 - **Write four options, not two.** Two options is a coin flip that pays full
   points.
+- **A sorting round wants seven items and a criterion people can
+  reason about** — years, sizes, distances. Give the anchor to the item whose
+  value is most useful as a yardstick, not the easiest one. One or two sorting
+  rounds a game: they take a minute each and the novelty wears off.
 - **Select all wants five or six options with at most half of them right.**
   Fewer options and guessing the set is easy; more right than wrong and ticking
   everything pays (see the table above).

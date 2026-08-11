@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react"
 import { Link, createFileRoute } from "@tanstack/react-router"
 import {
+  ChevronDown,
+  ChevronUp,
   ClipboardPaste,
   Download,
   Plus,
@@ -16,7 +18,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { loadCollections, saveCollections } from "@/lib/store"
-import { defaultSettings, hasOptions } from "@/lib/game-types"
+import { defaultSettings, hasAnswerText, hasOptions } from "@/lib/game-types"
 import type {
   Collection,
   Question,
@@ -32,6 +34,7 @@ export const Route = createFileRoute("/create")({
 const typeLabels: Record<QuestionType, string> = {
   mc: "Multiple Choice",
   multi: "Select All",
+  sort: "Sorting",
   buzz: "Buzz",
   free: "Free Input",
   reveal: "Image Reveal",
@@ -39,11 +42,29 @@ const typeLabels: Record<QuestionType, string> = {
 
 const allFilters: Array<RevealFilter> = ["zoom", "blur", "pixelate", "scramble"]
 
+function swap<T>(list: Array<T>, a: number, b: number): Array<T> {
+  const next = [...list]
+  ;[next[a], next[b]] = [next[b], next[a]]
+  return next
+}
+
 function newQuestion(type: QuestionType): Question {
   const id = crypto.randomUUID()
   if (type === "mc") return { id, type, text: "", options: ["", ""], correct: 0 }
   if (type === "multi")
     return { id, type, text: "", options: ["", "", ""], correct: [] }
+  // rows are written in the true order; the server scrambles the item list
+  // when the room starts, so what players receive is never the answer
+  if (type === "sort")
+    return {
+      id,
+      type,
+      text: "",
+      // seven is where skill pays most and a lucky shuffle least
+      items: ["", "", "", "", "", "", ""],
+      correct: [0, 1, 2, 3, 4, 5, 6],
+      values: ["", "", "", "", "", "", ""],
+    }
   if (type === "reveal")
     return {
       id,
@@ -65,25 +86,29 @@ const aiPrompt = `Generate a question collection for a game show app. Reply with
 
 Every question object has "id" (unique string), "type", "text" (the question itself), and depending on the type the fields below.
 
-"mc" — multiple choice, players pick an option:
+"mc" — multiple choice, players pick one option:
 { "id": "q1", "type": "mc", "text": "...", "options": ["A", "B", "C", "D"], "correct": 0 }
-"correct" is the 0-based index into "options". At least 2 options.
+"correct" is the 0-based index into "options". Four options is the good number — two is a coin flip that pays full points.
 
-"multi" — select all, players pick every correct option and only score on the exact set:
+"multi" — select all, players tick every option they think is right:
 { "id": "q2", "type": "multi", "text": "...", "options": ["A", "B", "C", "D", "E"], "correct": [0, 2] }
-"correct" is a list of 0-based indexes, at least 2 of them, and never all of the options. Write the text so it is clear that several answers are right.
+"correct" is a list of 0-based indexes. Scoring is per tick: +1 for a right one, -1 for a wrong one, so a player who ticks everything scores (right options - wrong options). That means: five or six options, and never more right ones than wrong ones — two right out of five is a good shape. Write the text so it is clear that several answers are right ("Which of these are…").
+
+"sort" — players put the items in order by some criterion:
+{ "id": "q3", "type": "sort", "text": "Oldest to newest", "items": ["A", "B", "C", "D", "E", "F"], "correct": [3, 0, 5, 1, 4, 2], "values": ["1971", "1996", "2008", "1954", "2001", "1988"], "anchor": 0 }
+"items" is the list in any order, "correct" is item indexes top to bottom in the true order, and "values" is optional but include it — it is shown as each slot is revealed. "anchor" is optional: the one item whose value players are told up front, as a scale to reason against. Seven items is the good number; below six a lucky shuffle scores nearly as well as real knowledge. Say the direction in the text ("oldest first").
 
 "buzz" — players buzz in, the host judges out loud:
-{ "id": "q3", "type": "buzz", "text": "...", "answer": "..." }
+{ "id": "q4", "type": "buzz", "text": "...", "answer": "..." }
 
 "free" — players type an answer, the host judges:
-{ "id": "q4", "type": "free", "text": "...", "answer": "..." }
+{ "id": "q5", "type": "free", "text": "...", "answer": "..." }
 
-"answer" is optional but include it — it is shown to the host when the round closes.
+"answer" is optional but include it — the host reveals it to the room at the end of the round.
 
-There is a fourth type, "reveal", that slowly uncovers an uploaded image. Skip it: images are uploaded in the app, not generated here. For the same reason never emit an "image" field.
+There is a fifth type, "reveal", that slowly uncovers an uploaded image. Skip it: images are uploaded in the app, not generated here. For the same reason never emit an "image" field.
 
-Keep question text to a single line. Ask me for the topic, difficulty and number of questions if I have not given them.`
+Keep question text to a single line. Mix the types rather than writing one kind all the way through, and put the harder questions later. Ask me for the topic, difficulty and number of questions if I have not given them.`
 
 async function copyAiPrompt() {
   // ponytail: execCommand fallback because navigator.clipboard is missing on
@@ -469,7 +494,147 @@ function CreatePage() {
                       </Button>
                     </div>
                   )}
-                  {!hasOptions(q) && (
+                  {q.type === "sort" && (
+                    <div className="flex flex-col gap-2">
+                      <p className="text-sm text-muted-foreground">
+                        Top to bottom in the correct order. Players get them
+                        shuffled. The value is optional and shows at the reveal
+                        — and up front for the anchor, as a scale to reason
+                        against.
+                      </p>
+                      {q.correct.map((item, slot) => (
+                        <div key={item} className="flex items-center gap-2">
+                          <span className="w-5 shrink-0 text-center text-sm font-bold text-muted-foreground tabular-nums">
+                            {slot + 1}
+                          </span>
+                          <Input
+                            placeholder={`Item ${slot + 1}`}
+                            value={q.items[item]}
+                            onChange={(e) =>
+                              updateQuestion(q.id, {
+                                items: q.items.map((v, j) =>
+                                  j === item ? e.target.value : v,
+                                ),
+                              })
+                            }
+                          />
+                          <Input
+                            className="w-28"
+                            placeholder="value"
+                            value={q.values?.[item] ?? ""}
+                            onChange={(e) =>
+                              updateQuestion(q.id, {
+                                values: q.items.map((_, j) =>
+                                  j === item
+                                    ? e.target.value
+                                    : (q.values?.[j] ?? ""),
+                                ),
+                              })
+                            }
+                          />
+                          <input
+                            type="radio"
+                            title="Anchor — its value is given away up front"
+                            checked={q.anchor === item}
+                            onChange={() =>
+                              updateQuestion(q.id, { anchor: item })
+                            }
+                          />
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            title="Move up"
+                            disabled={slot === 0}
+                            onClick={() =>
+                              updateQuestion(q.id, { correct: swap(q.correct, slot, slot - 1) })
+                            }
+                          >
+                            <ChevronUp />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            title="Move down"
+                            disabled={slot === q.correct.length - 1}
+                            onClick={() =>
+                              updateQuestion(q.id, { correct: swap(q.correct, slot, slot + 1) })
+                            }
+                          >
+                            <ChevronDown />
+                          </Button>
+                          {q.correct.length > 2 && (
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              title="Remove"
+                              onClick={() =>
+                                updateQuestion(q.id, {
+                                  items: q.items.filter((_, j) => j !== item),
+                                  values: q.values?.filter((_, j) => j !== item),
+                                  // indexes shift down past the removed item
+                                  correct: q.correct
+                                    .filter((x) => x !== item)
+                                    .map((x) => (x > item ? x - 1 : x)),
+                                  anchor:
+                                    q.anchor === item
+                                      ? undefined
+                                      : q.anchor !== undefined && q.anchor > item
+                                        ? q.anchor - 1
+                                        : q.anchor,
+                                })
+                              }
+                            >
+                              <Trash2 />
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                      <div className="flex flex-wrap items-center gap-3">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            updateQuestion(q.id, {
+                              items: [...q.items, ""],
+                              values: [...(q.values ?? q.items.map(() => "")), ""],
+                              correct: [...q.correct, q.items.length],
+                            })
+                          }
+                        >
+                          <Plus /> Item
+                        </Button>
+                        {q.anchor !== undefined && (
+                          <>
+                            <label className="flex items-center gap-1.5 text-sm">
+                              <input
+                                type="checkbox"
+                                checked={q.anchorLocked ?? false}
+                                onChange={(e) =>
+                                  updateQuestion(q.id, {
+                                    anchorLocked: e.target.checked,
+                                  })
+                                }
+                              />
+                              Hard anchor (also locked in its slot)
+                            </label>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                updateQuestion(q.id, {
+                                  anchor: undefined,
+                                  anchorLocked: undefined,
+                                })
+                              }
+                            >
+                              No anchor
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {hasAnswerText(q) && (
                     <Input
                       placeholder="Answer (shown when the round is closed, optional)"
                       value={q.answer ?? ""}
