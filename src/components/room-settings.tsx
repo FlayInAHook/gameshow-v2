@@ -94,7 +94,8 @@ export function SettingsFields({
         onChange={(e) => num("revealStepPercent", e.target.value)}
       />
       <Label htmlFor="mcsec">
-        Option round time limit in seconds (0 = off)
+        Round time limit in seconds (0 = off; buzz and reveal rounds have their
+        own clocks)
       </Label>
       <Input
         id="mcsec"

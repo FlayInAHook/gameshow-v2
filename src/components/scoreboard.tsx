@@ -140,6 +140,81 @@ export function ranked(state: RoomState) {
   return [...state.players].sort((a, b) => b.points - a.points)
 }
 
+/**
+ * The ranking. `showPoints` off leaves the order standing without the numbers,
+ * which is how a mid-game standing goes up: the room learns who is ahead, not
+ * by how much. `animate` is the end-of-game reveal, last place up.
+ */
+export function StandingsList({
+  state,
+  showPoints = true,
+  animate = false,
+  meId,
+}: {
+  state: RoomState
+  showPoints?: boolean
+  animate?: boolean
+  meId?: string
+}) {
+  const rows = ranked(state)
+  if (rows.length === 0)
+    return <p className="text-center text-muted-foreground">No players.</p>
+
+  return (
+    <div className="flex w-full max-w-md flex-col gap-2">
+      {rows.map((p, i) => (
+        <div
+          key={p.id}
+          className={cn(
+            "flex items-center gap-3 rounded-xl border p-4",
+            i === 0 && "border-amber-400 bg-amber-400/10",
+            p.id === meId && "ring-2 ring-primary",
+            animate && "lb-row",
+          )}
+          // reveal from last place up to the winner
+          style={
+            animate
+              ? { animationDelay: `${0.3 + (rows.length - 1 - i) * 0.4}s` }
+              : undefined
+          }
+        >
+          <span className={cn("w-8 text-2xl font-black", medals[i])}>
+            {i + 1}
+          </span>
+          <span
+            className={cn(
+              "min-w-0 flex-1 truncate text-lg font-medium",
+              i === 0 && "text-xl font-bold",
+            )}
+          >
+            {p.name}
+          </span>
+          {/* the tallies count as points given away, so they travel together */}
+          {showPoints && (
+            <>
+              <span
+                className="text-sm font-semibold text-green-600 tabular-nums"
+                title="Correct answers"
+              >
+                {p.correct}
+              </span>
+              <span
+                className="text-sm font-semibold text-red-600 tabular-nums"
+                title="Wrong answers"
+              >
+                {p.wrong}
+              </span>
+              <span className="w-12 text-right text-2xl font-bold tabular-nums">
+                {p.points}
+              </span>
+            </>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function Leaderboard({
   state,
   onReopen,
@@ -147,8 +222,6 @@ export function Leaderboard({
   state: RoomState
   onReopen?: () => void
 }) {
-  const rows = ranked(state)
-
   return (
     <main className="flex min-h-svh flex-col items-center justify-center gap-6 p-6">
       <h1
@@ -157,49 +230,7 @@ export function Leaderboard({
       >
         🏆 Leaderboard
       </h1>
-      <div className="flex w-full max-w-md flex-col gap-2">
-        {rows.map((p, i) => (
-          <div
-            key={p.id}
-            className={cn(
-              "lb-row flex items-center gap-3 rounded-xl border p-4",
-              i === 0 && "border-amber-400 bg-amber-400/10",
-            )}
-            // reveal from last place up to the winner
-            style={{ animationDelay: `${0.3 + (rows.length - 1 - i) * 0.4}s` }}
-          >
-            <span className={cn("w-8 text-2xl font-black", medals[i])}>
-              {i + 1}
-            </span>
-            <span
-              className={cn(
-                "min-w-0 flex-1 truncate text-lg font-medium",
-                i === 0 && "text-xl font-bold",
-              )}
-            >
-              {p.name}
-            </span>
-            <span
-              className="text-sm font-semibold text-green-600 tabular-nums"
-              title="Correct answers"
-            >
-              {p.correct}
-            </span>
-            <span
-              className="text-sm font-semibold text-red-600 tabular-nums"
-              title="Wrong answers"
-            >
-              {p.wrong}
-            </span>
-            <span className="w-12 text-right text-2xl font-bold tabular-nums">
-              {p.points}
-            </span>
-          </div>
-        ))}
-        {rows.length === 0 && (
-          <p className="text-center text-muted-foreground">No players.</p>
-        )}
-      </div>
+      <StandingsList state={state} animate />
       {onReopen && (
         <Button variant="outline" onClick={onReopen}>
           Reopen game

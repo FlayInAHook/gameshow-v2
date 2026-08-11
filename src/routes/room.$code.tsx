@@ -8,6 +8,7 @@ import {
   ConnectionDot,
   Leaderboard,
   McOption,
+  StandingsList,
   VoteBubbles,
 } from "@/components/scoreboard"
 import { Badge } from "@/components/ui/badge"
@@ -268,7 +269,18 @@ function PlayerView({
         </span>
       </header>
 
-      {!q ? (
+      {state.standings !== "off" ? (
+        <div className="flex flex-1 flex-col items-center gap-4 pt-4">
+          <h1 className="text-2xl font-bold">
+            {state.standings === "points" ? "🏆 Scores" : "🏆 Standings"}
+          </h1>
+          <StandingsList
+            state={state}
+            showPoints={state.standings === "points"}
+            meId={playerId}
+          />
+        </div>
+      ) : !q ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-2">
           <p className="animate-pulse text-xl text-muted-foreground">
             Waiting for the host…

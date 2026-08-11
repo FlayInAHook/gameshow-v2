@@ -7,6 +7,7 @@ import {
   ConnectionDot,
   Leaderboard,
   McOption,
+  StandingsList,
   VoteBubbles,
   medals,
   ranked,
@@ -99,6 +100,20 @@ function SpectatePage() {
 }
 
 function Stage({ state, q }: { state: RoomState; q: Question | null }) {
+  // the scoreboard takes the stage while the host is showing it
+  if (state.standings !== "off")
+    return (
+      <div className="flex flex-1 flex-col items-center gap-4">
+        <h1 className="text-3xl font-black">
+          {state.standings === "points" ? "🏆 Scores" : "🏆 Standings"}
+        </h1>
+        <StandingsList
+          state={state}
+          showPoints={state.standings === "points"}
+        />
+      </div>
+    )
+
   if (!q)
     return (
       <div className="flex flex-1 items-center justify-center">

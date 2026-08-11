@@ -192,6 +192,10 @@ nothing, so the ceremony is unchanged.
   before you flip it. The spectate stage mirrors what the room is allowed to
   see; its sidebar does not, so keep that screen away from players too, and
   never share the spectate link with them.
+- **Put the standings up between rounds, positions-only by default.** Showing
+  the order without the numbers keeps a runaway leader from deflating the room,
+  and saves the full scores for the moments that deserve them — halfway, and
+  just before the last question. Starting the next question takes it down.
 - **Flip wrong options first.** Knocking out two of four and pausing before the
   last flip is the whole point of the staged reveal.
 - **Read out the wrong free answers first**, funniest last before the solution.

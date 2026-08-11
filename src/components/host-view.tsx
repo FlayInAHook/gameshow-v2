@@ -6,6 +6,8 @@ import {
   Eye,
   EyeOff,
   Gavel,
+  ListOrdered,
+  Pause,
   Pencil,
   Play,
   RotateCcw,
@@ -70,11 +72,11 @@ export function HostView({
       <ResizablePanelGroup orientation="horizontal">
         <ResizablePanel defaultSize="28%" minSize="15%">
           <ResizablePanelGroup orientation="vertical">
-            <ResizablePanel defaultSize="55%">
+            <ResizablePanel defaultSize="34%">
               <PlayersPanel state={state} act={act} />
             </ResizablePanel>
             <ResizableHandle withHandle />
-            <ResizablePanel>
+            <ResizablePanel defaultSize="66%">
               <SettingsPanel
                 state={state}
                 act={act}
@@ -90,7 +92,15 @@ export function HostView({
         </ResizablePanel>
         <ResizableHandle withHandle />
         <ResizablePanel defaultSize="32%" minSize="20%">
-          <ActionsPanel state={state} questions={questions} act={act} />
+          <ResizablePanelGroup orientation="vertical">
+            <ResizablePanel defaultSize="75%">
+              <ActionsPanel state={state} questions={questions} act={act} />
+            </ResizablePanel>
+            <ResizableHandle withHandle />
+            <ResizablePanel defaultSize="25%">
+              <RoomPanel state={state} act={act} />
+            </ResizablePanel>
+          </ResizablePanelGroup>
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>
@@ -399,6 +409,9 @@ function ActionsPanel({
       : null
   const playerName = (id: string) =>
     state.players.find((p) => p.id === id)?.name ?? "?"
+  // who the host is still waiting on — the option board shows votes but says
+  // nothing about the people who haven't voted
+  const quiet = state.players.filter((p) => state.answers[p.id] === undefined)
   // ?? keeps a room created before this setting existed from stepping to NaN
   const step = state.settings.revealStepPercent ?? 8
   // the action carries the whole face-up set, so toggling is a client-side diff
@@ -507,6 +520,12 @@ function ActionsPanel({
                   <EyeOff /> Face down
                 </Button>
               </div>
+              {quiet.length > 0 && (
+                <p className="text-sm text-muted-foreground">
+                  {state.locked ? "No answer from" : "Still to answer"}:{" "}
+                  {quiet.map((p) => p.name).join(", ")}
+                </p>
+              )}
             </div>
           )}
           {q.type === "sort" && (
@@ -640,18 +659,48 @@ function ActionsPanel({
             </div>
           )}
 
-          {hasOptions(q) && state.settings.mcSeconds > 0 && (
-            <div className="flex items-center gap-3">
-              <Button
-                disabled={state.timerLeft !== null}
-                onClick={() => act({ kind: "startTimer" })}
-              >
-                <Timer /> Start timer ({state.settings.mcSeconds}s)
-              </Button>
-              {state.timerLeft !== null && (
-                <span className="text-2xl font-bold tabular-nums">
-                  {state.timerLeft}s
-                </span>
+          {/* every round anyone answers at their own pace — a buzz race times
+              itself, and a reveal has its own clock */}
+          {!buzzed && state.settings.mcSeconds > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              {state.timerLeft === null ? (
+                <Button onClick={() => act({ kind: "timer", mode: "start" })}>
+                  <Timer /> Start timer ({state.settings.mcSeconds}s)
+                </Button>
+              ) : (
+                <>
+                  <span
+                    className={cn(
+                      "text-2xl font-bold tabular-nums",
+                      state.timerLeft <= 5 && "text-red-600",
+                      !state.timerRunning && "text-muted-foreground",
+                    )}
+                  >
+                    {state.timerLeft}s
+                  </span>
+                  {state.timerRunning ? (
+                    <Button
+                      variant="outline"
+                      onClick={() => act({ kind: "timer", mode: "pause" })}
+                    >
+                      <Pause /> Pause
+                    </Button>
+                  ) : (
+                    <Button
+                      disabled={state.timerLeft === 0}
+                      onClick={() => act({ kind: "timer", mode: "resume" })}
+                    >
+                      <Play /> Continue
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    title="Back to the full duration, stopped"
+                    onClick={() => act({ kind: "timer", mode: "reset" })}
+                  >
+                    <RotateCcw /> Reset timer
+                  </Button>
+                </>
               )}
             </div>
           )}
@@ -684,20 +733,47 @@ function ActionsPanel({
             </div>
           )}
 
-          {q.type === "sort" && Object.keys(state.answers).length > 0 && (
+          {/* walk the players, not the answers, so the ones who haven't
+              touched it are on the list rather than missing from it */}
+          {q.type === "sort" && state.players.length > 0 && (
             <div className="flex flex-col gap-2">
               <Label>Arrangements — points are what the flip will pay</Label>
-              {Object.entries(state.answers).map(([pid, value]) => {
+              {state.players.map((p) => {
+                const pid = p.id
+                const value = state.answers[pid]
                 const pos = placedAt(value)
+                const missing = q.items.length - pos.size
                 return (
-                  <div key={pid} className="rounded-lg border p-2">
+                  <div
+                    key={pid}
+                    className={cn(
+                      "rounded-lg border p-2",
+                      value === undefined && "border-dashed opacity-60",
+                    )}
+                  >
                     <div className="flex items-center gap-2">
                       <span className="min-w-0 flex-1 truncate font-semibold">
                         {playerName(pid)}
                       </span>
-                      <Badge variant="secondary">
-                        {scoreSort(q, value, state.settings.sortPoints)} pts
-                      </Badge>
+                      {value === undefined ? (
+                        <Badge variant="outline">
+                          {state.locked ? "no answer" : "nothing placed yet"}
+                        </Badge>
+                      ) : (
+                        <>
+                          {missing > 0 && (
+                            <Badge
+                              variant="destructive"
+                              title="Unplaced items score nothing"
+                            >
+                              {missing} still in the pool
+                            </Badge>
+                          )}
+                          <Badge variant="secondary">
+                            {scoreSort(q, value, state.settings.sortPoints)} pts
+                          </Badge>
+                        </>
+                      )}
                     </div>
                     <ol className="mt-1 flex flex-wrap gap-x-2 text-sm text-muted-foreground">
                       {q.correct.map((_, slot) => {
@@ -723,14 +799,12 @@ function ActionsPanel({
 
           {/* option rounds have no answer list: the vote bubbles under each
               option are the same information, and flipping scores it */}
-          {hasAnswerText(q) && Object.keys(state.answers).length > 0 && (
+          {q.type === "free" && state.players.length > 0 && (
             <div className="flex flex-col gap-2">
-              <Label>
-                {q.type === "free"
-                  ? "Answers — the eye reads one out to the room"
-                  : "Answers"}
-              </Label>
-              {Object.entries(state.answers).map(([pid, value]) => {
+              <Label>Answers — the eye reads one out to the room</Label>
+              {state.players.map((p) => {
+                const pid = p.id
+                const value = state.answers[pid]
                 const shown = state.revealedAnswers.includes(pid)
                 return (
                   <div
@@ -738,6 +812,7 @@ function ActionsPanel({
                     className={cn(
                       "flex items-start gap-2 rounded-lg border p-2 text-base",
                       shown && "border-primary bg-primary/10",
+                      value === undefined && "border-dashed opacity-60",
                     )}
                   >
                     <div className="min-w-0 flex-1">
@@ -746,11 +821,17 @@ function ActionsPanel({
                       </div>
                       {/* quoted behind a rule so the answer can't be mistaken
                           for the name once it wraps onto its own lines */}
-                      <div className="mt-1 border-l-2 border-muted-foreground/40 pl-2 text-muted-foreground wrap-anywhere">
-                        {value}
+                      <div
+                        className={cn(
+                          "mt-1 border-l-2 border-muted-foreground/40 pl-2 text-muted-foreground wrap-anywhere",
+                          value === undefined && "italic",
+                        )}
+                      >
+                        {value ??
+                          (state.locked ? "no answer" : "still answering…")}
                       </div>
                     </div>
-                    {q.type === "free" && (
+                    {value !== undefined && (
                       <Button
                         variant="ghost"
                         size="icon"
@@ -764,29 +845,51 @@ function ActionsPanel({
                   </div>
                 )
               })}
-              {q.type === "free" && (
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      act({
-                        kind: "revealAnswers",
-                        playerIds: Object.keys(state.answers),
-                      })
-                    }
-                  >
-                    <Eye /> Read all out
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => act({ kind: "revealAnswers", playerIds: [] })}
-                  >
-                    <EyeOff /> Hide all
-                  </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    act({
+                      kind: "revealAnswers",
+                      playerIds: Object.keys(state.answers),
+                    })
+                  }
+                >
+                  <Eye /> Read all out
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => act({ kind: "revealAnswers", playerIds: [] })}
+                >
+                  <EyeOff /> Hide all
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* buzz and reveal rounds: the typed-answer list never applies, but
+              the host still judges whoever buzzed */}
+          {q.type === "buzz" && Object.keys(state.answers).length > 0 && (
+            <div className="flex flex-col gap-2">
+              <Label>Answers</Label>
+              {Object.entries(state.answers).map(([pid, value]) => (
+                <div
+                  key={pid}
+                  className="flex items-start gap-2 rounded-lg border p-2 text-base"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-semibold">
+                      {playerName(pid)}
+                    </div>
+                    <div className="mt-1 border-l-2 border-muted-foreground/40 pl-2 text-muted-foreground wrap-anywhere">
+                      {value}
+                    </div>
+                  </div>
+                  <AwardButtons onAward={(ok) => award(pid, ok)} />
                 </div>
-              )}
+              ))}
             </div>
           )}
 
@@ -833,6 +936,42 @@ function ActionsPanel({
           Select a question to start a round.
         </p>
       )}
+
+    </Panel>
+  )
+}
+
+// the controls that talk to the whole room rather than to the round
+function RoomPanel({
+  state,
+  act,
+}: {
+  state: RoomState
+  act: (a: HostAction) => void
+}) {
+  // pressing the one that is already up takes the room back to the question
+  const show = (mode: RoomState["standings"]) =>
+    act({ kind: "standings", mode: state.standings === mode ? "off" : mode })
+
+  return (
+    <Panel title="The room">
+      <Label>Standings — put the scoreboard on everyone's screen</Label>
+      <div className="grid grid-cols-2 gap-2">
+        <Button
+          variant={state.standings === "ranks" ? "default" : "outline"}
+          title="The order only — who is ahead, but not by how much"
+          onClick={() => show("ranks")}
+        >
+          <ListOrdered /> Positions
+        </Button>
+        <Button
+          variant={state.standings === "points" ? "default" : "outline"}
+          title="The order with everyone's points"
+          onClick={() => show("points")}
+        >
+          <Trophy /> With points
+        </Button>
+      </div>
 
       <Label className="mt-2">Sounds</Label>
       <div className="grid grid-cols-2 gap-2">

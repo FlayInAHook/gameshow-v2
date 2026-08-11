@@ -40,6 +40,7 @@ type Room = {
   // a buzz froze the auto-reveal; clearing the buzzer resumes it
   revealPaused?: boolean
   timerLeft: number | null
+  standings: RoomState["standings"]
   roundTimer?: ReturnType<typeof setInterval>
   questionAt: number
   buzzes: { playerId: string; time: number }[]
@@ -166,6 +167,8 @@ function stateOf(room: Room, viewerId?: string): RoomState {
         : {},
     reveal: room.reveal,
     timerLeft: room.timerLeft,
+    timerRunning: room.roundTimer !== undefined,
+    standings: room.standings,
     questionAt: room.questionAt,
     buzzes: room.buzzes,
     answers: viewerId === undefined ? room.answers : answersFor(room, viewerId),
@@ -206,10 +209,31 @@ function stopReveal(room: Room) {
   room.revealPaused = false
 }
 
+// stops the countdown and clears it off the clients
 function stopTimer(room: Room) {
+  pauseTimer(room)
+  room.timerLeft = null
+}
+
+// stops the countdown but leaves the number standing, so it can carry on
+function pauseTimer(room: Room) {
   if (room.roundTimer) clearInterval(room.roundTimer)
   room.roundTimer = undefined
-  room.timerLeft = null
+}
+
+function runTimer(room: Room) {
+  pauseTimer(room)
+  room.roundTimer = setInterval(() => {
+    const left = (room.timerLeft ?? 1) - 1
+    if (left > 0) room.timerLeft = left
+    else {
+      closeRound(room)
+      // closeRound nulls timerLeft; put the 0 back so clients can land their
+      // final countdown cue. the next question clears it
+      room.timerLeft = 0
+    }
+    broadcast(room)
+  }, 1000)
 }
 
 function currentQuestion(room: Room): Question | undefined {
@@ -297,6 +321,7 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         paidOptions: [],
         reveal: 0,
         timerLeft: null,
+        standings: "off",
         questionAt: Date.now(),
         buzzes: [],
         answers: {},
@@ -435,8 +460,13 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
     if (playerId !== room.hostId) return
     const a = msg.action
     switch (a.kind) {
+      case "standings":
+        room.standings = a.mode
+        break
       case "question":
         room.currentIndex = a.index
+        // the next question takes the room off the scoreboard by itself
+        room.standings = "off"
         if (a.index !== null && !room.played.includes(a.index))
           room.played.push(a.index)
         room.locked = false
@@ -555,22 +585,18 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         room.buzzes = []
         if (room.revealPaused) startReveal(room)
         break
-      case "startTimer": {
-        const secs = room.settings.mcSeconds
-        if (!secs || secs < 1) break
-        stopTimer(room)
-        room.timerLeft = Math.round(secs)
-        room.roundTimer = setInterval(() => {
-          const left = (room.timerLeft ?? 1) - 1
-          if (left > 0) room.timerLeft = left
-          else {
-            closeRound(room)
-            // closeRound nulls timerLeft; put the 0 back so clients can land
-            // their final countdown cue. the next question clears it
-            room.timerLeft = 0
-          }
-          broadcast(room)
-        }, 1000)
+      case "timer": {
+        const secs = Math.round(room.settings.mcSeconds)
+        if (a.mode === "pause") pauseTimer(room)
+        else if (a.mode === "reset") stopTimer(room)
+        else if (a.mode === "resume") {
+          // nothing to carry on from once it has run out
+          if (room.timerLeft !== null && room.timerLeft > 0) runTimer(room)
+        } else if (secs >= 1) {
+          stopTimer(room)
+          room.timerLeft = secs
+          runTimer(room)
+        }
         break
       }
       case "points": {

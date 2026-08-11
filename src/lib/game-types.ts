@@ -242,6 +242,13 @@ export type RoomState = {
   reveal: number
   // seconds left on the round timer, counted down by the server; null = no timer
   timerLeft: number | null
+  // false while it sits paused on a number, so the host knows which of
+  // pause/resume to offer
+  timerRunning: boolean
+  // the mid-game scoreboard the host puts on everyone's screen: "ranks" is the
+  // order without the numbers, so the room learns who is ahead but not by how
+  // far. clears itself when the next question starts
+  standings: "off" | "ranks" | "points"
   // server clock when this round started; clients restart their reaction timer
   // whenever it changes
   questionAt: number
@@ -286,7 +293,9 @@ export type HostAction =
   | { kind: "revealSolution"; on: boolean }
   // drops the buzzes without touching reveal progress, unlike "reset"
   | { kind: "clearBuzz" }
-  | { kind: "startTimer" }
+  // reset puts it back to the full duration, stopped
+  | { kind: "timer"; mode: "start" | "pause" | "resume" | "reset" }
+  | { kind: "standings"; mode: RoomState["standings"] }
   | { kind: "end" }
   | { kind: "reopen" }
 
