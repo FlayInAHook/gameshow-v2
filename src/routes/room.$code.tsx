@@ -108,9 +108,23 @@ function RoomPage() {
   if (!joined)
     return (
       <Center>
-        <h1 className="text-2xl font-bold">Join room {code}</h1>
+        <h1 className="text-2xl font-bold">
+          Join room{" "}
+          {/* the code drops in a character at a time, so the room number is the
+              first thing that moves on the whole site */}
+          {code.split("").map((ch, i) => (
+            <span
+              key={i}
+              className="pop-in inline-block"
+              style={{ animationDelay: `${0.1 + i * 0.08}s` }}
+            >
+              {ch}
+            </span>
+          ))}
+        </h1>
         <form
-          className="flex gap-2"
+          className="pop-in flex gap-2"
+          style={{ animationDelay: `${0.1 + code.length * 0.08}s` }}
           onSubmit={(e) => {
             e.preventDefault()
             if (!name.trim()) return
@@ -208,6 +222,39 @@ function PlayerView({
   const myBuzzIndex = state.buzzes.findIndex((b) => b.playerId === playerId)
   const [freeText, setFreeText] = useState("")
   const buzzable = q?.type === "buzz" || q?.type === "reveal"
+
+  // the points you just took, floating out of the score. the first state to
+  // arrive is the baseline, not a gain — a reconnect mid-game would otherwise
+  // read as scoring everything at once
+  const [pop, setPop] = useState<{ n: number; key: number } | null>(null)
+  const prevPoints = useRef<number | null>(null)
+  useEffect(() => {
+    const p = me?.points
+    if (p === undefined) return
+    if (prevPoints.current !== null && p !== prevPoints.current)
+      setPop({ n: p - prevPoints.current, key: performance.now() })
+    prevPoints.current = p
+  }, [me?.points])
+
+  // somebody else got there first: the edges of the screen go red
+  const [beat, setBeat] = useState(0)
+  const prevBuzz = useRef(0)
+  useEffect(() => {
+    const n = state.buzzes.length
+    if (n === 1 && prevBuzz.current === 0 && state.buzzes[0].playerId !== playerId)
+      setBeat((k) => k + 1)
+    prevBuzz.current = n
+  }, [state.buzzes, playerId])
+
+  // a chime for each arrival, but only in the lobby — mid-round it is noise
+  const inLobby = state.currentIndex === null
+  const prevCount = useRef<number | null>(null)
+  useEffect(() => {
+    const n = state.players.length
+    if (prevCount.current !== null && n > prevCount.current && inLobby)
+      sounds.chime()
+    prevCount.current = n
+  }, [state.players.length, inLobby])
   // multiple choice replaces the pick, select-all toggles it in and out of the
   // set — either way the whole answer goes back to the server
   const pick = (i: string) =>
@@ -237,14 +284,15 @@ function PlayerView({
     shownAt.current = performance.now()
   }, [roundAt])
 
-  const buzz = useCallback(
-    () =>
-      send({
-        type: "buzz",
-        reaction: Math.round(performance.now() - shownAt.current),
-      }),
-    [send],
-  )
+  // bumped here rather than on the button so the spacebar gets the shockwave too
+  const [ringKey, setRingKey] = useState(0)
+  const buzz = useCallback(() => {
+    setRingKey((k) => k + 1)
+    send({
+      type: "buzz",
+      reaction: Math.round(performance.now() - shownAt.current),
+    })
+  }, [send])
 
   // spacebar buzzes on buzz questions
   const canBuzz = buzzable && !state.locked && myBuzzIndex < 0
@@ -261,15 +309,62 @@ function PlayerView({
   }, [canBuzz, buzz])
 
   return (
-    <main className="mx-auto flex min-h-svh max-w-xl flex-col gap-6 p-6">
+    // pop-in doubles as the join transition: this mounts once, when the first
+    // state lands
+    <main className="pop-in mx-auto flex min-h-svh max-w-xl flex-col gap-6 p-6">
+      {beat > 0 && (
+        <div
+          key={beat}
+          aria-hidden
+          className="edge-flash pointer-events-none fixed inset-0 z-50"
+        />
+      )}
+
+      {/* the clock as a bar as well as a number — on a phone the drain is
+          readable out of the corner of your eye while you are picking */}
+      {state.timerLeft !== null && state.timerTotal !== null && (
+        <div className="fixed inset-x-0 top-0 z-40 h-1 bg-muted">
+          <div
+            className={cn(
+              "h-full transition-[width] duration-1000 ease-linear",
+              state.timerLeft <= 5 ? "bg-red-600" : "bg-primary",
+            )}
+            style={{
+              width: `${(state.timerLeft / state.timerTotal) * 100}%`,
+            }}
+          />
+        </div>
+      )}
+
       <header className="flex items-center gap-3">
         <ConnectionDot connected={connected} />
         <span className="font-medium">{me?.name}</span>
         <Badge variant="secondary">Room {state.code}</Badge>
-        <NumberFlow
-          className="ml-auto text-2xl font-bold"
-          value={me?.points ?? 0}
-        />
+        <span className="relative ml-auto">
+          {pop && (
+            <span
+              key={`glow-${pop.key}`}
+              aria-hidden
+              className={cn(
+                "score-glow pointer-events-none absolute inset-0 rounded-full blur-md",
+                pop.n > 0 ? "bg-green-500" : "bg-red-500",
+              )}
+            />
+          )}
+          <NumberFlow className="text-2xl font-bold" value={me?.points ?? 0} />
+          {pop && (
+            <span
+              key={pop.key}
+              aria-hidden
+              className={cn(
+                "score-float pointer-events-none absolute -top-1 left-1/2 text-lg font-black",
+                pop.n > 0 ? "text-green-500" : "text-red-500",
+              )}
+            >
+              {signed(pop.n)}
+            </span>
+          )}
+        </span>
       </header>
 
       {state.standings !== "off" ? (
@@ -280,14 +375,30 @@ function PlayerView({
           <StandingsList
             state={state}
             showPoints={state.standings === "points"}
+            animate="quick"
             meId={playerId}
           />
         </div>
       ) : !q ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-2">
+        <div className="flex flex-1 flex-col items-center justify-center gap-4">
           <p className="animate-pulse text-xl text-muted-foreground">
             Waiting for the host…
           </p>
+          {/* joined order, not rank: a new arrival lands on the end and pops in
+              on its own instead of shuffling everyone else's chip */}
+          <div className="flex flex-wrap justify-center gap-2">
+            {[...state.players]
+              .sort((a, b) => a.joinedAt - b.joinedAt)
+              .map((p) => (
+                <Badge
+                  key={p.id}
+                  variant={p.id === playerId ? "default" : "secondary"}
+                  className="pop-in max-w-full text-base"
+                >
+                  {p.name}
+                </Badge>
+              ))}
+          </div>
           {!state.hostConnected && (
             <Badge variant="outline">Host disconnected</Badge>
           )}
@@ -295,10 +406,13 @@ function PlayerView({
       ) : (
         <div className="flex flex-1 flex-col items-center gap-6 pt-8">
           {state.timerLeft !== null && (
+            // keyed on the value: the remount is what restarts the beat, one
+            // per tick, in step with the tick cue
             <span
+              key={state.timerLeft}
               className={cn(
                 "text-5xl font-black tabular-nums",
-                state.timerLeft <= 5 && "text-red-600",
+                state.timerLeft <= 5 && "tick-pop text-red-600",
               )}
             >
               {state.timerLeft}
@@ -353,10 +467,15 @@ function PlayerView({
                     className={cn(
                       "flex min-w-0 flex-col gap-1",
                       // the entrance, then — for a select-all answered exactly
-                      // right — a lap of honour once the key is all face-up
+                      // right — a lap of honour once the key is all face-up.
+                      // in between, a flinch on a pick that turns out wrong
                       wonTheSet && myPicks.includes(String(i))
                         ? "win-flash"
-                        : "pop-in",
+                        : state.revealedOptions.includes(i) &&
+                            myPicks.includes(String(i)) &&
+                            !state.correctOptions.includes(i)
+                          ? "shake"
+                          : "pop-in",
                     )}
                     style={{ animationDelay: `${i * 0.09}s` }}
                   >
@@ -402,39 +521,65 @@ function PlayerView({
 
           {buzzable && (
             <>
-              <button
-                disabled={state.locked || myBuzzIndex >= 0}
-                onClick={buzz}
-                className={cn(
-                  "rounded-full bg-red-600 font-black text-white shadow-lg transition-transform select-none",
-                  q.type === "reveal"
-                    ? "px-10 py-4 text-2xl"
-                    : "size-52 text-3xl",
-                  state.locked || myBuzzIndex >= 0
-                    ? "opacity-50"
-                    : "hover:scale-105 active:scale-95",
+              <span className="relative inline-flex">
+                {/* behind the button in paint order, so it reads as a
+                    shockwave coming out from under it */}
+                {ringKey > 0 && (
+                  <span
+                    key={ringKey}
+                    aria-hidden
+                    className="ring pointer-events-none absolute inset-0 rounded-full bg-red-500"
+                  />
                 )}
-              >
-                BUZZ
-              </button>
+                <button
+                  disabled={state.locked || myBuzzIndex >= 0}
+                  onClick={buzz}
+                  className={cn(
+                    "rounded-full bg-red-600 font-black text-white shadow-lg transition-transform select-none",
+                    q.type === "reveal"
+                      ? "px-10 py-4 text-2xl"
+                      : "size-52 text-3xl",
+                    state.locked || myBuzzIndex >= 0
+                      ? "opacity-50"
+                      : "hover:scale-105 active:scale-95",
+                    // armed and unpressed. a box-shadow pulse, not a transform
+                    // one — transform is what hover/active are already using
+                    canBuzz && "breathe",
+                  )}
+                >
+                  BUZZ
+                </button>
+              </span>
               <p className="text-sm text-muted-foreground">
                 or hit <Kbd>Space</Kbd>
               </p>
               {state.buzzes.length > 0 && (
                 <ol className="text-center">
-                  {state.buzzes.map((b, i) => (
-                    <li
-                      key={b.playerId}
-                      className={cn(
-                        "text-lg",
-                        b.playerId === playerId && "font-bold",
-                        i === 0 && "text-xl text-primary",
-                      )}
-                    >
-                      {i + 1}.{" "}
-                      {state.players.find((p) => p.id === b.playerId)?.name}
-                    </li>
-                  ))}
+                  {/* no stagger: they land one at a time as they happen */}
+                  {state.buzzes.map((b, i) => {
+                    const who = state.players.find(
+                      (p) => p.id === b.playerId,
+                    )?.name
+                    return (
+                      <li
+                        key={b.playerId}
+                        className={cn(
+                          "pop-in text-lg",
+                          b.playerId === playerId && "font-bold",
+                          i === 0 && "text-xl text-primary",
+                        )}
+                      >
+                        {i + 1}.{" "}
+                        {/* the pulse goes on the name, not the row — the row's
+                            animation slot is taken by the entrance */}
+                        {i === 0 ? (
+                          <span className="animate-pulse">{who}</span>
+                        ) : (
+                          who
+                        )}
+                      </li>
+                    )
+                  })}
                 </ol>
               )}
             </>

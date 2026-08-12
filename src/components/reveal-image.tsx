@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { cn } from "@/lib/utils"
 import type { RevealFilter } from "@/lib/game-types"
 
@@ -124,20 +124,49 @@ export function RevealImage({
   const imgRef = useRef<HTMLImageElement | null>(null)
   const at = zoom ?? { x: 0.5, y: 0.5 }
 
+  // the host steps the reveal 5% at a time, which lands as a jump. glide to each
+  // new value instead. ponytail: no easing curve — linear over 300ms is what a
+  // continuous reveal looks like, and every frame is a full redraw, so the
+  // browser dropping frames on a big image is the degradation we want
+  const [shown, setShown] = useState(progress)
+  const from = useRef(progress)
+  const lastSrc = useRef(src)
+  useEffect(() => {
+    // a new question resets progress to 0 — snapping beats un-revealing it
+    if (lastSrc.current !== src) {
+      lastSrc.current = src
+      from.current = progress
+      setShown(progress)
+      return
+    }
+    const start = from.current
+    if (start === progress) return
+    const t0 = performance.now()
+    let raf = 0
+    const step = () => {
+      const k = Math.min(1, (performance.now() - t0) / 300)
+      from.current = start + (progress - start) * k
+      setShown(from.current)
+      if (k < 1) raf = requestAnimationFrame(step)
+    }
+    raf = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(raf)
+  }, [src, progress])
+
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     if (imgRef.current?.src === src && imgRef.current.complete) {
-      drawObscured(canvas, imgRef.current, filters, progress, at)
+      drawObscured(canvas, imgRef.current, filters, shown, at)
       return
     }
     const img = new Image()
     img.onload = () => {
       imgRef.current = img
-      drawObscured(canvas, img, filters, progress, at)
+      drawObscured(canvas, img, filters, shown, at)
     }
     img.src = src
-  }, [src, filters, progress, at.x, at.y])
+  }, [src, filters, shown, at.x, at.y])
 
   return <canvas ref={canvasRef} className={cn("max-w-full", className)} />
 }

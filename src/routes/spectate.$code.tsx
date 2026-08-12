@@ -115,6 +115,7 @@ function Stage({ state, q }: { state: RoomState; q: Question | null }) {
         <StandingsList
           state={state}
           showPoints={state.standings === "points"}
+          animate="quick"
         />
       </div>
     )
@@ -133,11 +134,25 @@ function Stage({ state, q }: { state: RoomState; q: Question | null }) {
 
   return (
     <>
+      {state.timerLeft !== null && state.timerTotal !== null && (
+        <div className="fixed inset-x-0 top-0 z-40 h-1 bg-muted">
+          <div
+            className={cn(
+              "h-full transition-[width] duration-1000 ease-linear",
+              state.timerLeft <= 5 ? "bg-red-600" : "bg-primary",
+            )}
+            style={{ width: `${(state.timerLeft / state.timerTotal) * 100}%` }}
+          />
+        </div>
+      )}
+
       {state.timerLeft !== null && (
+        // keyed on the value so the beat restarts once a second
         <span
+          key={state.timerLeft}
           className={cn(
             "text-5xl font-black tabular-nums",
-            state.timerLeft <= 5 && "text-red-600",
+            state.timerLeft <= 5 && "tick-pop text-red-600",
           )}
         >
           {state.timerLeft}

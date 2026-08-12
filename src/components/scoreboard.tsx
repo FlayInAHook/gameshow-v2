@@ -1,3 +1,4 @@
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import NumberFlow from "@number-flow/react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -25,11 +26,12 @@ export function VoteBubbles({
   if (who.length === 0) return null
   return (
     <div className="flex flex-wrap gap-1">
-      {who.map((p) => (
+      {who.map((p, i) => (
         <Badge
           key={p.id}
           variant={p.id === meId ? "default" : "secondary"}
-          className="max-w-full"
+          className="pop-in max-w-full"
+          style={{ animationDelay: `${i * 0.05}s` }}
         >
           {p.name}
         </Badge>
@@ -58,7 +60,9 @@ export function AnswerBubbles({
       {rows.map(({ player, value }) => (
         <div
           key={player.id}
-          className="flex items-start gap-2 rounded-lg border p-2 text-lg"
+          // the host flips these one at a time as they read them out, so each
+          // one lands on its own — no stagger to work out
+          className="pop-in flex items-start gap-2 rounded-lg border p-2 text-lg"
         >
           <Badge
             variant={player.id === meId ? "default" : "secondary"}
@@ -107,6 +111,9 @@ export function McOption({
         // out the side
         "h-auto min-h-16 min-w-0 px-3 py-2 text-lg whitespace-normal wrap-anywhere",
         !onClick && "pointer-events-none",
+        // the flip runs off the class arriving, so a host un-flipping and
+        // flipping again plays it again — which is what "uncover" should do
+        shown && (correct ? "flip-win" : "flip-dud"),
         // solid fill, not a 15% tint: white on green-700 clears 4.5:1 in both
         // themes, where the old tint-plus-disabled-opacity read as a smudge
         shown &&
@@ -142,21 +149,49 @@ export function ranked(state: RoomState) {
 }
 
 /**
+ * Rows only ever swap places, so a FLIP on the rows themselves is the whole
+ * animation — no library, and no page-wide view transition to freeze the option
+ * flips that fire off the very same message. offsetTop, not the bounding rect:
+ * the rect is viewport-relative, so scrolling the page would read as a move.
+ */
+function useRankSlide() {
+  const refs = useRef(new Map<string, HTMLDivElement | null>())
+  const tops = useRef(new Map<string, number>())
+  useLayoutEffect(() => {
+    const still = matchMedia("(prefers-reduced-motion: reduce)").matches
+    for (const [id, el] of refs.current) {
+      if (!el) continue
+      const top = el.offsetTop
+      const was = tops.current.get(id)
+      if (!still && was !== undefined && Math.abs(was - top) > 1)
+        el.animate(
+          [{ transform: `translateY(${was - top}px)` }, { transform: "none" }],
+          { duration: 450, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+        )
+      tops.current.set(id, top)
+    }
+  })
+  return refs
+}
+
+/**
  * The ranking. `showPoints` off leaves the order standing without the numbers,
  * which is how a mid-game standing goes up: the room learns who is ahead, not
- * by how much. `animate` is the end-of-game reveal, last place up.
+ * by how much. `animate` is the entrance: "reveal" is the end-of-game one, last
+ * place up, "quick" is a standing going up mid-game.
  */
 export function StandingsList({
   state,
   showPoints = true,
-  animate = false,
+  animate,
   meId,
 }: {
   state: RoomState
   showPoints?: boolean
-  animate?: boolean
+  animate?: "reveal" | "quick"
   meId?: string
 }) {
+  const refs = useRankSlide()
   const rows = ranked(state)
   if (rows.length === 0)
     return <p className="text-center text-muted-foreground">No players.</p>
@@ -166,17 +201,20 @@ export function StandingsList({
       {rows.map((p, i) => (
         <div
           key={p.id}
+          ref={(el) => void refs.current.set(p.id, el)}
           className={cn(
             "flex items-center gap-3 rounded-xl border p-4",
             i === 0 && "border-amber-400 bg-amber-400/10",
             p.id === meId && "ring-2 ring-primary",
             animate && "lb-row",
           )}
-          // reveal from last place up to the winner
           style={
-            animate
-              ? { animationDelay: `${0.3 + (rows.length - 1 - i) * 0.4}s` }
-              : undefined
+            animate === "reveal"
+              ? // from last place up to the winner
+                { animationDelay: `${0.3 + (rows.length - 1 - i) * 0.4}s` }
+              : animate === "quick"
+                ? { animationDelay: `${i * 0.07}s` }
+                : undefined
           }
         >
           <span className={cn("w-8 text-2xl font-black", medals[i])}>
@@ -217,6 +255,39 @@ export function StandingsList({
   )
 }
 
+/**
+ * One burst up from the bottom of the screen, `delay` seconds in. Dynamically
+ * imported so the library only lands when a game actually ends, and gold-led
+ * because the winner's row is the one bit of colour this theme owns.
+ */
+function useConfetti(delay: number) {
+  useEffect(() => {
+    const t = setTimeout(() => {
+      void import("canvas-confetti").then(({ default: confetti }) => {
+        void confetti({
+          colors: [
+            "#fbbf24",
+            "#f59e0b",
+            "#22c55e",
+            "#38bdf8",
+            "#a855f7",
+            "#f97316",
+          ],
+          disableForReducedMotion: true,
+          particleCount: 100,
+          spread: 80,
+          startVelocity: 44,
+          ticks: 220,
+          gravity: 0.88,
+          scalar: 0.92,
+          origin: { x: 0.5, y: 0.9 },
+        })
+      })
+    }, delay * 1000)
+    return () => clearTimeout(t)
+  }, [delay])
+}
+
 export function Leaderboard({
   state,
   onReopen,
@@ -224,6 +295,14 @@ export function Leaderboard({
   state: RoomState
   onReopen?: () => void
 }) {
+  // snapshot at mount: a late reconnect changing the player count must not
+  // re-arm the burst
+  const [delay] = useState(
+    // the winner is revealed last, so hold it until they land
+    () => 0.3 + Math.max(0, state.players.length - 1) * 0.4,
+  )
+  useConfetti(delay)
+
   return (
     <main className="flex min-h-svh flex-col items-center justify-center gap-6 p-6">
       <h1
@@ -232,7 +311,7 @@ export function Leaderboard({
       >
         🏆 Leaderboard
       </h1>
-      <StandingsList state={state} animate />
+      <StandingsList state={state} animate="reveal" />
       {onReopen && (
         <Button variant="outline" onClick={onReopen}>
           Reopen game

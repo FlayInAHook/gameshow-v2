@@ -121,6 +121,7 @@ function SortableRow({
   onRemove,
   interactive,
   won,
+  pop,
 }: {
   row: Row
   q: SortQuestion
@@ -130,6 +131,7 @@ function SortableRow({
   onRemove: () => void
   interactive: boolean
   won: boolean
+  pop: boolean
 }) {
   const {
     attributes,
@@ -155,8 +157,16 @@ function SortableRow({
         "flex touch-none items-center gap-2 rounded-lg border bg-card p-2",
         locked && "border-primary/60 bg-primary/5",
         isDragging && "z-10 opacity-40",
-        // a wave down the board when the whole order came out right
-        won && "win-flash",
+        // a wave down the board when the whole order came out right, and until
+        // then each slot turns over as the host flips it. `won` only lands on
+        // the last slot, so the two never fight over the same row
+        won
+          ? "win-flash"
+          : right
+            ? "flip-win"
+            : wrong
+              ? "flip-dud"
+              : truth !== null && "flip-in",
         right &&
           "border-2 border-green-500 bg-green-500/10 dark:border-green-400 dark:bg-green-500/15",
         wrong &&
@@ -178,6 +188,9 @@ function SortableRow({
           className={cn(
             "flex min-w-0 flex-1 items-center gap-2",
             interactive && !locked && "cursor-grab active:cursor-grabbing",
+            // only the tap-to-place path: a drag has dnd-kit's own motion, and
+            // popping the contents mid-drag fights it
+            pop && "pop-in",
           )}
         >
           {interactive && !locked && (
@@ -255,6 +268,9 @@ export function SortBoard({
   // animation the moment the drag ends — so without a local copy it measures
   // the old order and flies the row back where it came from
   const [local, setLocal] = useState<string[] | null>(null)
+  // the last item placed by tapping it. it stays set, so the class sits there
+  // inert until the next tap moves it to another row
+  const [popped, setPopped] = useState<number | null>(null)
   const sent = useRef<string | null>(null)
   useEffect(() => {
     // the server has caught up with us, or the round moved on
@@ -314,6 +330,7 @@ export function SortBoard({
 
   function place(item: number, slot: number) {
     if (!interactive || slot === lockedSlot) return
+    setPopped(item)
     commit(insertAt(placed, item, slot, lockedSlot))
   }
 
@@ -404,6 +421,7 @@ export function SortBoard({
                 locked={row.slot === lockedSlot}
                 interactive={interactive}
                 won={won}
+                pop={row.item !== null && row.item === popped}
                 onNudge={(by) => nudge(row.slot, by)}
                 onRemove={() => toPool(row.slot)}
               />
