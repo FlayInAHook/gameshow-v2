@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Kbd } from "@/components/ui/kbd"
+import { useTimerCues } from "@/hooks/use-timer-cues"
 import { initAudio, sounds } from "@/lib/sounds"
 import {
   getHostRooms,
@@ -218,14 +219,7 @@ function PlayerView({
   const hideQuestion =
     state.settings.buzzHidesQuestion && state.buzzes.length > 0
 
-  // countdown cues: a heads-up at 10s, then every second from 5 down to 0.
-  // the dep is the value itself, so each second fires exactly once
-  const timerLeft = state.timerLeft
-  useEffect(() => {
-    if (timerLeft === null) return
-    if (timerLeft === 0) sounds.timeup()
-    else if (timerLeft === 10 || timerLeft <= 5) sounds.tick()
-  }, [timerLeft])
+  useTimerCues(state)
 
   // reaction clock: restarts whenever the server starts a round, measured with
   // performance.now() so a wall-clock adjustment can't skew it

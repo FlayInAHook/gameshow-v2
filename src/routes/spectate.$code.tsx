@@ -15,6 +15,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
+import { useTimerCues } from "@/hooks/use-timer-cues"
 import { initAudio, sounds } from "@/lib/sounds"
 import { useRoom } from "@/lib/use-room"
 import { cn } from "@/lib/utils"
@@ -40,6 +41,9 @@ function SpectatePage() {
     if (n > 0 && prevBuzzes.current === 0) sounds.buzzer()
     prevBuzzes.current = n
   }, [state?.buzzes.length])
+
+  // this screen is usually the one by the room's speakers
+  useTimerCues(state)
 
   const prevPhase = useRef(state?.phase)
   useEffect(() => {

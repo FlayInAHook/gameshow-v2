@@ -55,6 +55,13 @@ export const sounds: Record<SoundName, () => void> = {
     initAudio()
     tone(880, 0, 0.07, "triangle", 0.15)
   },
+  // the milestones on the way down — two soft notes, deliberately unlike the
+  // last-five-seconds tick so "time is passing" doesn't read as "time is up"
+  chime: () => {
+    initAudio()
+    tone(784, 0, 0.1, "triangle", 0.1)
+    tone(587, 0.09, 0.18, "triangle", 0.1)
+  },
   timeup: () => {
     initAudio()
     tone(880, 0, 0.5, "triangle", 0.2, 220)

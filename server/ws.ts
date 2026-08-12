@@ -40,6 +40,7 @@ type Room = {
   // a buzz froze the auto-reveal; clearing the buzzer resumes it
   revealPaused?: boolean
   timerLeft: number | null
+  timerTotal: number | null
   standings: RoomState["standings"]
   roundTimer?: ReturnType<typeof setInterval>
   questionAt: number
@@ -168,6 +169,7 @@ function stateOf(room: Room, viewerId?: string): RoomState {
     reveal: room.reveal,
     timerLeft: room.timerLeft,
     timerRunning: room.roundTimer !== undefined,
+    timerTotal: room.timerTotal,
     standings: room.standings,
     questionAt: room.questionAt,
     buzzes: room.buzzes,
@@ -213,6 +215,7 @@ function stopReveal(room: Room) {
 function stopTimer(room: Room) {
   pauseTimer(room)
   room.timerLeft = null
+  room.timerTotal = null
 }
 
 // stops the countdown but leaves the number standing, so it can carry on
@@ -321,6 +324,7 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         paidOptions: [],
         reveal: 0,
         timerLeft: null,
+        timerTotal: null,
         standings: "off",
         questionAt: Date.now(),
         buzzes: [],
@@ -586,7 +590,8 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         if (room.revealPaused) startReveal(room)
         break
       case "timer": {
-        const secs = Math.round(room.settings.mcSeconds)
+        // the host picks the length per round; the setting is the fallback
+        const secs = Math.round(a.seconds ?? room.settings.mcSeconds)
         if (a.mode === "pause") pauseTimer(room)
         else if (a.mode === "reset") stopTimer(room)
         else if (a.mode === "resume") {
@@ -595,6 +600,7 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         } else if (secs >= 1) {
           stopTimer(room)
           room.timerLeft = secs
+          room.timerTotal = secs
           runTimer(room)
         }
         break

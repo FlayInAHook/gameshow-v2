@@ -311,6 +311,8 @@ function CopyRow({ label, url }: { label: string; url: string }) {
   )
 }
 
+const timerPresets = [15, 30, 45, 60, 120]
+
 const typeBadge: Record<Question["type"], string> = {
   mc: "MC",
   multi: "Multi",
@@ -664,9 +666,19 @@ function ActionsPanel({
           {!buzzed && state.settings.mcSeconds > 0 && (
             <div className="flex flex-wrap items-center gap-2">
               {state.timerLeft === null ? (
-                <Button onClick={() => act({ kind: "timer", mode: "start" })}>
-                  <Timer /> Start timer ({state.settings.mcSeconds}s)
-                </Button>
+                timerPresets.map((secs) => (
+                  <Button
+                    key={secs}
+                    // the room's configured length leads, the rest are there
+                    // for the round that needs longer or shorter
+                    variant={
+                      secs === state.settings.mcSeconds ? "default" : "outline"
+                    }
+                    onClick={() => act({ kind: "timer", mode: "start", seconds: secs })}
+                  >
+                    <Timer /> {secs < 60 ? `${secs}s` : `${secs / 60}m`}
+                  </Button>
+                ))
               ) : (
                 <>
                   <span

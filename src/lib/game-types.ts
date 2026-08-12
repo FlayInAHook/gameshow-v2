@@ -245,6 +245,9 @@ export type RoomState = {
   // false while it sits paused on a number, so the host knows which of
   // pause/resume to offer
   timerRunning: boolean
+  // what it was started at, so the cues can be spaced by how much is left of
+  // the whole rather than at fixed seconds
+  timerTotal: number | null
   // the mid-game scoreboard the host puts on everyone's screen: "ranks" is the
   // order without the numbers, so the room learns who is ahead but not by how
   // far. clears itself when the next question starts
@@ -266,6 +269,7 @@ export type SoundName =
   | "wrong"
   | "tada"
   | "tick"
+  | "chime"
   | "timeup"
 
 export type HostAction =
@@ -293,8 +297,13 @@ export type HostAction =
   | { kind: "revealSolution"; on: boolean }
   // drops the buzzes without touching reveal progress, unlike "reset"
   | { kind: "clearBuzz" }
-  // reset puts it back to the full duration, stopped
-  | { kind: "timer"; mode: "start" | "pause" | "resume" | "reset" }
+  // seconds is the length the host picked for this round; without it the
+  // room's configured default. reset stops it and clears the clock
+  | {
+      kind: "timer"
+      mode: "start" | "pause" | "resume" | "reset"
+      seconds?: number
+    }
   | { kind: "standings"; mode: RoomState["standings"] }
   | { kind: "end" }
   | { kind: "reopen" }
