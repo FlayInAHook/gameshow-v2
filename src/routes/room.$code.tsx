@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { Link, createFileRoute } from "@tanstack/react-router"
+import NumberFlow from "@number-flow/react"
 import { HostView } from "@/components/host-view"
 import { RevealImage } from "@/components/reveal-image"
 import { SortBoard } from "@/components/sort-board"
@@ -26,7 +27,7 @@ import {
 } from "@/lib/store"
 import { useRoom } from "@/lib/use-room"
 import { cn } from "@/lib/utils"
-import { MAX_ANSWER, hasOptions, picksOf } from "@/lib/game-types"
+import { MAX_ANSWER, hasOptions, picksOf, samePicks } from "@/lib/game-types"
 import type {
   ClientMsg,
   HostAction,
@@ -197,6 +198,13 @@ function PlayerView({
       : null
   const myAnswer = state.answers[playerId]
   const myPicks = picksOf(myAnswer)
+  // every card face-up, not just the key: the decoys they left alone are half
+  // of what they got right. correctOptions is the whole key by then, so a
+  // player can tell they nailed it without ever being sent the answer
+  const wonTheSet =
+    q?.type === "multi" &&
+    state.revealedOptions.length === q.options.length &&
+    samePicks(myAnswer, state.correctOptions)
   const myBuzzIndex = state.buzzes.findIndex((b) => b.playerId === playerId)
   const [freeText, setFreeText] = useState("")
   const buzzable = q?.type === "buzz" || q?.type === "reveal"
@@ -258,9 +266,10 @@ function PlayerView({
         <ConnectionDot connected={connected} />
         <span className="font-medium">{me?.name}</span>
         <Badge variant="secondary">Room {state.code}</Badge>
-        <span className="ml-auto text-2xl font-bold tabular-nums">
-          {me?.points ?? 0}
-        </span>
+        <NumberFlow
+          className="ml-auto text-2xl font-bold"
+          value={me?.points ?? 0}
+        />
       </header>
 
       {state.standings !== "off" ? (
@@ -341,7 +350,14 @@ function PlayerView({
                 {q.options.map((opt, i) => (
                   <div
                     key={i}
-                    className="pop-in flex min-w-0 flex-col gap-1"
+                    className={cn(
+                      "flex min-w-0 flex-col gap-1",
+                      // the entrance, then — for a select-all answered exactly
+                      // right — a lap of honour once the key is all face-up
+                      wonTheSet && myPicks.includes(String(i))
+                        ? "win-flash"
+                        : "pop-in",
+                    )}
                     style={{ animationDelay: `${i * 0.09}s` }}
                   >
                     <McOption

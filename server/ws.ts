@@ -6,6 +6,7 @@ import type {
   RoomState,
   ServerMsg,
   Settings,
+  SoundName,
 } from "../src/lib/game-types"
 import {
   MAX_ANSWER,
@@ -14,7 +15,10 @@ import {
   defaultSettings,
   hasOptions,
   picksOf,
+  placedAt,
+  samePicks,
   scoreSort,
+  sortPerfect,
 } from "../src/lib/game-types"
 
 type Room = {
@@ -35,6 +39,11 @@ type Room = {
   revealedAnswers: string[]
   // mc options already paid out this round; server-only, clients never need it
   paidOptions: number[]
+  // slots whose verdict has already been played, so an un-flip and re-flip
+  // doesn't buzz the room twice, and whether the perfect answers have been
+  // congratulated yet
+  cued: number[]
+  congratulated: boolean
   reveal: number
   revealTimer?: ReturnType<typeof setInterval>
   // a buzz froze the auto-reveal; clearing the buzzer resumes it
@@ -205,6 +214,16 @@ function fullTopic(code: string) {
   return `${code}#full`
 }
 
+// a cue for named ears only, where publishing to the room would tell everyone
+// something that is only true of one person's answer
+function playFor(ids: Array<string>, name: SoundName) {
+  const msg = JSON.stringify({ type: "sound", name } satisfies ServerMsg)
+  for (const id of new Set(ids)) {
+    const ws = sockets.get(id)
+    if (ws?.readyState === 1) ws.send(msg)
+  }
+}
+
 function stopReveal(room: Room) {
   if (room.revealTimer) clearInterval(room.revealTimer)
   room.revealTimer = undefined
@@ -322,6 +341,8 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         revealedOptions: [],
         revealedAnswers: [],
         paidOptions: [],
+        cued: [],
+        congratulated: false,
         reveal: 0,
         timerLeft: null,
         timerTotal: null,
@@ -478,6 +499,8 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         room.revealedOptions = []
         room.revealedAnswers = []
         room.paidOptions = []
+        room.cued = []
+        room.congratulated = false
         room.buzzes = []
         room.answers = {}
         room.reveal = 0
@@ -499,6 +522,8 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
         room.revealedOptions = []
         room.revealedAnswers = []
         room.paidOptions = []
+        room.cued = []
+        room.congratulated = false
         room.buzzes = []
         room.answers = {}
         room.reveal = 0
@@ -520,8 +545,25 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
             ...new Set(a.indexes.filter((i) => i >= 0 && i < q.items.length)),
           ]
           room.revealed = room.revealedOptions.length === q.items.length
+          // every slot is a verdict of its own: whoever put something there
+          // finds out on the flip, the way an option round works. an empty
+          // slot is nothing to judge, and a locked anchor was never theirs
+          for (const slot of room.revealedOptions) {
+            if (room.cued.includes(slot)) continue
+            room.cued.push(slot)
+            const truth = q.correct[slot]
+            if (q.anchorLocked && truth === q.anchor) continue
+            for (const [pid, value] of Object.entries(room.answers)) {
+              if (!room.players.has(pid)) continue
+              const theirs = [...placedAt(value)].find(([, s]) => s === slot)
+              // a slot left empty is a slot they lost, so it buzzes like a
+              // wrong one — silence would read as "nothing to see here"
+              playFor([pid], theirs?.[0] === truth ? "correct" : "wrong")
+            }
+          }
           if (!room.revealed || room.paidOptions.length > 0) break
           room.paidOptions = q.items.map((_, i) => i)
+          room.congratulated = true
           for (const [pid, value] of Object.entries(room.answers)) {
             const p = room.players.get(pid)
             if (!p) continue
@@ -531,6 +573,9 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
             // once on the leaderboard tally
             if (won > 0) p.correct++
             else p.wrong++
+            // the whole thing right is worth a fanfare of its own, on top of
+            // the per-slot verdicts they have just heard
+            if (sortPerfect(q, value)) playFor([pid], "tada")
           }
           break
         }
@@ -558,14 +603,40 @@ function handleMessage(ws: Ws, msg: ClientMsg) {
           if (room.paidOptions.includes(i)) continue
           room.paidOptions.push(i)
           const correct = correctSet(q).includes(i)
+          let anyPicked = false
           for (const [pid, value] of Object.entries(room.answers)) {
-            if (!picksOf(value).includes(String(i))) continue
             const p = room.players.get(pid)
             if (!p) continue
-            p.points += correct ? forRight : forWrong
-            if (correct) p.correct++
-            else p.wrong++
+            if (picksOf(value).includes(String(i))) {
+              anyPicked = true
+              p.points += correct ? forRight : forWrong
+              if (correct) p.correct++
+              else p.wrong++
+              playFor([pid], correct ? "correct" : "wrong")
+            } else if (correct) {
+              // a right answer they left on the table is still a verdict on
+              // their answer — silence would read as "this one wasn't about me"
+              playFor([pid], "wrong")
+            }
+            // a decoy nobody ticked says nothing about them, so it stays quiet
           }
+          // the host machine is usually the room's speakers, so it hears the
+          // option's own verdict once
+          if (correct || anyPicked)
+            playFor([room.hostId], correct ? "correct" : "wrong")
+        }
+        // a select-all is only right as a whole, and "as a whole" means every
+        // card: until the decoys are face-up too, nobody knows they avoided
+        // them, so the fanfare waits for the last one to turn over
+        if (
+          q.type === "multi" &&
+          room.revealedOptions.length === q.options.length &&
+          !room.congratulated
+        ) {
+          room.congratulated = true
+          for (const [pid, value] of Object.entries(room.answers))
+            if (room.players.has(pid) && samePicks(value, q.correct))
+              playFor([pid], "tada")
         }
         break
       }

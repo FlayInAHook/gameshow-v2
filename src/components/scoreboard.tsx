@@ -1,3 +1,4 @@
+import NumberFlow from "@number-flow/react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -204,9 +205,10 @@ export function StandingsList({
               >
                 {p.wrong}
               </span>
-              <span className="w-12 text-right text-2xl font-bold tabular-nums">
-                {p.points}
-              </span>
+              <NumberFlow
+                className="w-12 text-right text-2xl font-bold"
+                value={p.points}
+              />
             </>
           )}
         </div>

@@ -98,6 +98,17 @@ export function placedAt(value: string | undefined): Map<number, number> {
  * so partial knowledge still pays, and floored at the value of the slots placed
  * exactly right so a correct placement always counts for something.
  */
+// every item that was theirs to place, in its slot
+export function sortPerfect(q: SortQuestion, value: string | undefined) {
+  const truePos = new Map(q.correct.map((item, slot) => [item, slot]))
+  const playerPos = placedAt(value)
+  const items = scoredItems(q)
+  return (
+    items.length > 0 &&
+    items.every((item) => playerPos.get(item) === truePos.get(item))
+  )
+}
+
 export function scoreSort(
   q: SortQuestion,
   value: string | undefined,

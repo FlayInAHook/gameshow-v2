@@ -1,4 +1,5 @@
 import { useState } from "react"
+import NumberFlow from "@number-flow/react"
 import {
   BellOff,
   Check,
@@ -152,9 +153,10 @@ function PlayersPanel({
           <Badge variant="outline" title="roundtrip">
             {p.rtt}ms
           </Badge>
-          <span className="w-10 text-right text-sm font-bold tabular-nums">
-            {p.points}
-          </span>
+          <NumberFlow
+            className="w-10 text-right text-sm font-bold"
+            value={p.points}
+          />
           <Button
             variant="ghost"
             size="icon-xs"
@@ -416,8 +418,10 @@ function ActionsPanel({
   const quiet = state.players.filter((p) => state.answers[p.id] === undefined)
   // ?? keeps a room created before this setting existed from stepping to NaN
   const step = state.settings.revealStepPercent ?? 8
-  // the action carries the whole face-up set, so toggling is a client-side diff
-  const flipOption = (i: number, correct: boolean) => {
+  // the action carries the whole face-up set, so toggling is a client-side diff.
+  // the verdict cue comes back from the server, which knows who picked what —
+  // a flip says nothing about the answer of someone who didn't pick it
+  const flipOption = (i: number) => {
     const shown = state.revealedOptions.includes(i)
     act({
       kind: "revealOptions",
@@ -425,8 +429,6 @@ function ActionsPanel({
         ? state.revealedOptions.filter((x) => x !== i)
         : [...state.revealedOptions, i],
     })
-    // the flip is the payoff, so the whole room hears the verdict
-    if (!shown) act({ kind: "sound", name: correct ? "correct" : "wrong" })
   }
   // same toggle for a free round, except a typed answer carries no verdict —
   // the host still judges it with the award buttons
@@ -495,7 +497,7 @@ function ActionsPanel({
                           />
                         )
                       }
-                      onClick={() => flipOption(i, isCorrect)}
+                      onClick={() => flipOption(i)}
                     />
                     <VoteBubbles state={state} option={i} />
                   </div>

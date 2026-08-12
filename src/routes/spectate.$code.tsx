@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react"
 import { Link, createFileRoute } from "@tanstack/react-router"
+import NumberFlow from "@number-flow/react"
 import { RevealImage } from "@/components/reveal-image"
 import { SortBoard } from "@/components/sort-board"
 import {
@@ -240,9 +241,7 @@ function Standings({ state }: { state: RoomState }) {
           <span className="text-xs font-semibold text-red-600 tabular-nums">
             {p.wrong}
           </span>
-          <span className="w-10 text-right font-bold tabular-nums">
-            {p.points}
-          </span>
+          <NumberFlow className="w-10 text-right font-bold" value={p.points} />
         </div>
       ))}
     </div>

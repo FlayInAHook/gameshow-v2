@@ -120,6 +120,7 @@ function SortableRow({
   onNudge,
   onRemove,
   interactive,
+  won,
 }: {
   row: Row
   q: SortQuestion
@@ -128,6 +129,7 @@ function SortableRow({
   onNudge: (by: number) => void
   onRemove: () => void
   interactive: boolean
+  won: boolean
 }) {
   const {
     attributes,
@@ -144,11 +146,17 @@ function SortableRow({
   return (
     <li
       ref={setNodeRef}
-      style={{ transform: CSS.Translate.toString(transform), transition }}
+      style={{
+        transform: CSS.Translate.toString(transform),
+        transition,
+        animationDelay: won ? `${row.slot * 0.08}s` : undefined,
+      }}
       className={cn(
         "flex touch-none items-center gap-2 rounded-lg border bg-card p-2",
         locked && "border-primary/60 bg-primary/5",
         isDragging && "z-10 opacity-40",
+        // a wave down the board when the whole order came out right
+        won && "win-flash",
         right &&
           "border-2 border-green-500 bg-green-500/10 dark:border-green-400 dark:bg-green-500/15",
         wrong &&
@@ -274,6 +282,15 @@ export function SortBoard({
   const rows = rowsOf(slots)
   // the locked row is pinned, so it takes no part in the reordering
   const movable = rows.filter((r) => r.slot !== lockedSlot)
+  // the whole order right, with the room looking at it. the player works this
+  // out from the slots that have turned over, never from the answer key
+  const won =
+    value !== undefined &&
+    state.revealed &&
+    slots.every(
+      (raw, slot) =>
+        slot === lockedSlot || String(state.revealedOrder[slot]) === raw,
+    )
 
   // the board moves now, the server hears about it in its own time
   const commit = (next: string[]) => {
@@ -386,6 +403,7 @@ export function SortBoard({
                 state={state}
                 locked={row.slot === lockedSlot}
                 interactive={interactive}
+                won={won}
                 onNudge={(by) => nudge(row.slot, by)}
                 onRemove={() => toPool(row.slot)}
               />
