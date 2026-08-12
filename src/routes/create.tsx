@@ -17,7 +17,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { loadCollections, saveCollections } from "@/lib/store"
+import { loadCollections, saveCollections, storageEstimate } from "@/lib/store"
+import { cn } from "@/lib/utils"
 import { defaultSettings, hasAnswerText, hasOptions } from "@/lib/game-types"
 import type {
   Collection,
@@ -135,11 +136,61 @@ function exportCollection(c: Collection) {
   URL.revokeObjectURL(a.href)
 }
 
-function CreatePage() {
-  const [collections, setCollections] = useState<Array<Collection>>(loadCollections)
-  const [selectedId, setSelectedId] = useState<string | null>(
-    collections[0]?.id ?? null,
+const fmtBytes = (n: number) =>
+  n >= 1e9
+    ? `${(n / 1e9).toFixed(1)} GB`
+    : n >= 1e6
+      ? `${Math.round(n / 1e6)} MB`
+      : `${Math.round(n / 1e3)} kB`
+
+/**
+ * What the collections are costing, against what the browser will actually give
+ * this origin. The share is usually a rounding error next to a disk-sized quota,
+ * so the bar keeps a visible sliver — the numbers are the point, not the fill.
+ */
+function StorageBar({
+  info,
+  error,
+}: {
+  info: { usage: number; quota: number } | null
+  error: string | null
+}) {
+  if (!info && !error) return null
+  const pct = info ? (info.usage / info.quota) * 100 : 0
+  return (
+    <div className="mt-2 flex flex-col gap-1 border-t pt-3">
+      {info && (
+        <>
+          <div className="h-1 overflow-hidden rounded-full bg-muted">
+            <div
+              className={cn(
+                "h-full rounded-full",
+                pct > 90 ? "bg-destructive" : "bg-primary",
+              )}
+              style={{ width: `${Math.min(100, Math.max(0.5, pct))}%` }}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground tabular-nums">
+            {fmtBytes(info.usage)} of {fmtBytes(info.quota)} used
+          </p>
+        </>
+      )}
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
   )
+}
+
+function CreatePage() {
+  const [collections, setCollections] = useState<Array<Collection>>([])
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  // reading IndexedDB is async, so the first render has an empty list that must
+  // never be written back over the real one
+  const [loaded, setLoaded] = useState(false)
+  const [storage, setStorage] = useState<{
+    usage: number
+    quota: number
+  } | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const importRef = useRef<HTMLInputElement>(null)
   const [copied, setCopied] = useState(false)
 
@@ -175,7 +226,32 @@ function CreatePage() {
     if (json) importJson(json)
   }
 
-  useEffect(() => saveCollections(collections), [collections])
+  const refreshStorage = () => void storageEstimate().then(setStorage)
+
+  useEffect(() => {
+    void loadCollections().then((cs) => {
+      setCollections(cs)
+      setSelectedId(cs[0]?.id ?? null)
+      setLoaded(true)
+      refreshStorage()
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!loaded) return
+    void saveCollections(collections).then(
+      () => {
+        setSaveError(null)
+        refreshStorage()
+      },
+      (e: unknown) =>
+        setSaveError(
+          e instanceof DOMException && e.name === "QuotaExceededError"
+            ? "Out of storage — delete a collection or shrink some images."
+            : `Could not save: ${String(e)}`,
+        ),
+    )
+  }, [collections, loaded])
 
   const selected = collections.find((c) => c.id === selectedId) ?? null
 
@@ -205,8 +281,11 @@ function CreatePage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-svh max-w-5xl flex-col gap-4 p-6">
-      <div className="flex items-center gap-3">
+    <main className="mx-auto flex min-h-svh max-w-5xl flex-col gap-4 p-6 pt-0">
+      {/* sticks so Back is reachable from anywhere in a long collection. the
+          negative margin lets its background cover main's padding, otherwise
+          the questions show through the gap on either side as they scroll */}
+      <div className="sticky top-0 z-20 -mx-6 flex items-center gap-3 border-b bg-background px-6 py-3">
         <Button variant="ghost" size="sm" render={<Link to="/" />}>
           ← Back
         </Button>
@@ -214,9 +293,10 @@ function CreatePage() {
       </div>
 
       <div className="flex items-start gap-6">
-        {/* collection list — sticks while the question list scrolls past it,
-            and scrolls on its own once there are more collections than fit */}
-        <div className="sticky top-6 flex max-h-[calc(100svh-3rem)] w-72 shrink-0 flex-col gap-2 overflow-y-auto">
+        {/* collection list — sticks below the header while the question list
+            scrolls past it, and scrolls on its own once there are more
+            collections than fit */}
+        <div className="sticky top-20 flex max-h-[calc(100svh-6rem)] w-72 shrink-0 flex-col gap-2 overflow-y-auto">
           {collections.map((c) => (
             <div key={c.id} className="flex items-center gap-1">
               {/* min-w-0: the button is whitespace-nowrap, so its automatic
@@ -285,6 +365,8 @@ function CreatePage() {
               e.target.value = ""
             }}
           />
+
+          <StorageBar info={storage} error={saveError} />
         </div>
 
         {/* editor */}

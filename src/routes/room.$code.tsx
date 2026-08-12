@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils"
 import { MAX_ANSWER, hasOptions, picksOf, samePicks } from "@/lib/game-types"
 import type {
   ClientMsg,
+  Collection,
   HostAction,
   Question,
   RoomState,
@@ -46,13 +47,22 @@ function RoomPage() {
   // snapshot once at mount — used only to decide whether to (re)create the room;
   // after that the server's state.hostId is authoritative
   const [hostCollectionId] = useState(() => getHostRooms()[code])
-  const [collection] = useState(() =>
-    hostCollectionId != null
-      ? loadCollections().find((c) => c.id === hostCollectionId)
-      : undefined,
+  // undefined while IndexedDB is still answering, null once we know this
+  // browser is not the host. the difference matters: showing the join form to
+  // the host would have them join their own room as a player
+  const [collection, setCollection] = useState<Collection | null | undefined>(
+    hostCollectionId == null ? null : undefined,
   )
+  useEffect(() => {
+    if (hostCollectionId == null) return
+    void loadCollections().then((cs) =>
+      setCollection(cs.find((c) => c.id === hostCollectionId) ?? null),
+    )
+  }, [hostCollectionId])
   const [name, setName] = useState(getPlayerName)
-  const [joined, setJoined] = useState(collection != null)
+  const [joinedManually, setJoinedManually] = useState(false)
+  // the host is in as soon as their collection turns up; everyone else types a name
+  const joined = joinedManually || collection != null
 
   const joinMsg = !joined
     ? null
@@ -105,6 +115,13 @@ function RoomPage() {
       </Center>
     )
 
+  if (collection === undefined)
+    return (
+      <Center>
+        <p className="animate-pulse text-muted-foreground">Loading…</p>
+      </Center>
+    )
+
   if (!joined)
     return (
       <Center>
@@ -130,7 +147,7 @@ function RoomPage() {
             if (!name.trim()) return
             initAudio()
             setPlayerName(name.trim())
-            setJoined(true)
+            setJoinedManually(true)
           }}
         >
           <Input

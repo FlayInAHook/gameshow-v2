@@ -1,8 +1,10 @@
+import { useEffect, useState } from "react"
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { initAudio } from "@/lib/sounds"
 import { loadCollections, setHostRoom } from "@/lib/store"
+import type { Collection } from "@/lib/game-types"
 
 export const Route = createFileRoute("/host")({
   ssr: false,
@@ -11,7 +13,12 @@ export const Route = createFileRoute("/host")({
 
 function HostPage() {
   const navigate = useNavigate()
-  const collections = loadCollections()
+  // null while IndexedDB is still answering — an empty list would flash the
+  // "no collections yet" prompt at someone who has plenty
+  const [collections, setCollections] = useState<Array<Collection> | null>(null)
+  useEffect(() => {
+    void loadCollections().then(setCollections)
+  }, [])
 
   function host(collectionId: string) {
     initAudio() // user gesture — unlock audio before entering the room
@@ -30,7 +37,10 @@ function HostPage() {
         </Button>
         <h1 className="text-2xl font-bold">Host a game</h1>
       </div>
-      {collections.length === 0 && (
+      {collections === null && (
+        <p className="animate-pulse text-muted-foreground">Loading…</p>
+      )}
+      {collections?.length === 0 && (
         <p className="text-muted-foreground">
           No collections yet.{" "}
           <Link to="/create" className="underline">
@@ -38,7 +48,7 @@ function HostPage() {
           </Link>
         </p>
       )}
-      {collections.map((c) => (
+      {collections?.map((c) => (
         <Card key={c.id}>
           <CardContent className="flex items-center justify-between pt-4">
             <div>
