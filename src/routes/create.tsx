@@ -1,10 +1,28 @@
 import { useEffect, useRef, useState } from "react"
 import { Link, createFileRoute } from "@tanstack/react-router"
 import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core"
+import type { DragEndEvent } from "@dnd-kit/core"
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
+import {
   ChevronDown,
   ChevronUp,
   ClipboardPaste,
   Download,
+  GripVertical,
   Plus,
   Sparkles,
   Trash2,
@@ -51,7 +69,8 @@ function swap<T>(list: Array<T>, a: number, b: number): Array<T> {
 
 function newQuestion(type: QuestionType): Question {
   const id = crypto.randomUUID()
-  if (type === "mc") return { id, type, text: "", options: ["", ""], correct: 0 }
+  if (type === "mc")
+    return { id, type, text: "", options: ["", ""], correct: 0 }
   if (type === "multi")
     return { id, type, text: "", options: ["", "", ""], correct: [] }
   // rows are written in the true order; the server scrambles the item list
@@ -129,7 +148,7 @@ async function copyAiPrompt() {
 function exportCollection(c: Collection) {
   const a = document.createElement("a")
   a.href = URL.createObjectURL(
-    new Blob([JSON.stringify(c, null, 2)], { type: "application/json" }),
+    new Blob([JSON.stringify(c, null, 2)], { type: "application/json" })
   )
   a.download = `${c.name}.json`
   a.click()
@@ -165,7 +184,7 @@ function StorageBar({
             <div
               className={cn(
                 "h-full rounded-full",
-                pct > 90 ? "bg-destructive" : "bg-primary",
+                pct > 90 ? "bg-destructive" : "bg-primary"
               )}
               style={{ width: `${Math.min(100, Math.max(0.5, pct))}%` }}
             />
@@ -176,6 +195,47 @@ function StorageBar({
         </>
       )}
       {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  )
+}
+
+/**
+ * One question card with a grip in its gutter. The handle carries the drag
+ * listeners rather than the card itself: the card is full of text inputs, and
+ * a drag that starts on a click-and-select would be maddening.
+ */
+function SortableQuestion({
+  id,
+  children,
+}: {
+  id: string
+  children: React.ReactNode
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id })
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
+      className={cn("flex items-start gap-1", isDragging && "z-10 opacity-40")}
+    >
+      <button
+        {...attributes}
+        {...listeners}
+        type="button"
+        title="Drag to reorder"
+        // touch-none or the browser claims the gesture as a scroll on a phone
+        className="mt-5 cursor-grab touch-none rounded-md p-1 text-muted-foreground hover:bg-muted active:cursor-grabbing"
+      >
+        <GripVertical className="size-4" />
+      </button>
+      <div className="min-w-0 flex-1">{children}</div>
     </div>
   )
 }
@@ -198,7 +258,7 @@ function CreatePage() {
     try {
       // AIs like to wrap the answer in a ```json fence no matter what you ask
       const parsed = JSON.parse(
-        text.trim().replace(/^```(?:json)?\n?|\n?```$/g, ""),
+        text.trim().replace(/^```(?:json)?\n?|\n?```$/g, "")
       ) as Collection
       if (typeof parsed.name !== "string" || !Array.isArray(parsed.questions))
         throw new Error("bad shape")
@@ -248,8 +308,8 @@ function CreatePage() {
         setSaveError(
           e instanceof DOMException && e.name === "QuotaExceededError"
             ? "Out of storage — delete a collection or shrink some images."
-            : `Could not save: ${String(e)}`,
-        ),
+            : `Could not save: ${String(e)}`
+        )
     )
   }, [collections, loaded])
 
@@ -257,15 +317,37 @@ function CreatePage() {
 
   function updateSelected(patch: Partial<Collection>) {
     setCollections((cs) =>
-      cs.map((c) => (c.id === selectedId ? { ...c, ...patch } : c)),
+      cs.map((c) => (c.id === selectedId ? { ...c, ...patch } : c))
     )
+  }
+
+  const sensors = useSensors(
+    // a small distance so a tap on the handle isn't swallowed as a drag
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
+
+  // both the grip and the chevrons land here, so the two ways of reordering
+  // can't drift apart
+  function moveQuestion(from: number, to: number) {
+    if (!selected || to < 0 || to >= selected.questions.length) return
+    updateSelected({ questions: arrayMove(selected.questions, from, to) })
+  }
+
+  function onDragEnd({ active, over }: DragEndEvent) {
+    if (!over || active.id === over.id || !selected) return
+    const from = selected.questions.findIndex((q) => q.id === active.id)
+    const to = selected.questions.findIndex((q) => q.id === over.id)
+    if (from >= 0 && to >= 0) moveQuestion(from, to)
   }
 
   function updateQuestion(id: string, patch: Partial<Question>) {
     if (!selected) return
     updateSelected({
       questions: selected.questions.map((q) =>
-        q.id === id ? ({ ...q, ...patch } as Question) : q,
+        q.id === id ? ({ ...q, ...patch } as Question) : q
       ),
     })
   }
@@ -411,375 +493,440 @@ function CreatePage() {
               </div>
             </details>
 
-            {selected.questions.map((q, i) => (
-              <Card
-                key={q.id}
-                // paste anywhere in the card (the event bubbles up from
-                // whichever field has focus) to drop a screenshot straight in
-                onPaste={(e) => {
-                  const f = [...e.clipboardData.files].find((x) =>
-                    x.type.startsWith("image/"),
-                  )
-                  if (!f) return
-                  e.preventDefault()
-                  void fileToDataUrl(f).then((image) =>
-                    updateQuestion(q.id, { image }),
-                  )
-                }}
+            {/* neither of these renders a wrapper element, so the cards stay
+                direct children of the flex column and keep their gap */}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={onDragEnd}
+            >
+              <SortableContext
+                items={selected.questions.map((q) => q.id)}
+                strategy={verticalListSortingStrategy}
               >
-                <CardContent className="flex flex-col gap-3 pt-4">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary">{typeLabels[q.type]}</Badge>
-                    <span className="text-sm text-muted-foreground">
-                      #{i + 1}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      className="ml-auto"
-                      onClick={() =>
-                        updateSelected({
-                          questions: selected.questions.filter(
-                            (x) => x.id !== q.id,
-                          ),
-                        })
-                      }
+                {selected.questions.map((q, i) => (
+                  <SortableQuestion key={q.id} id={q.id}>
+                    <Card
+                      // paste anywhere in the card (the event bubbles up from
+                      // whichever field has focus) to drop a screenshot straight in
+                      onPaste={(e) => {
+                        const f = [...e.clipboardData.files].find((x) =>
+                          x.type.startsWith("image/")
+                        )
+                        if (!f) return
+                        e.preventDefault()
+                        void fileToDataUrl(f).then((image) =>
+                          updateQuestion(q.id, { image })
+                        )
+                      }}
                     >
-                      <Trash2 />
-                    </Button>
-                  </div>
-                  <Input
-                    placeholder="Question text"
-                    value={q.text}
-                    onChange={(e) => updateQuestion(q.id, { text: e.target.value })}
-                  />
-                  {q.image ? (
-                    <div className="flex items-start gap-2">
-                      <img
-                        src={q.image}
-                        alt=""
-                        className="max-h-32 rounded-lg"
-                      />
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        title="Remove image"
-                        onClick={() =>
-                          updateQuestion(q.id, { image: undefined })
-                        }
-                      >
-                        <Trash2 />
-                      </Button>
-                    </div>
-                  ) : (
-                    <div>
-                      <Label htmlFor={`img-${q.id}`}>
-                        Image (optional — or paste one into this card)
-                      </Label>
-                      <Input
-                        id={`img-${q.id}`}
-                        type="file"
-                        accept="image/*"
-                        className="mt-1"
-                        onChange={async (e) => {
-                          const f = e.target.files?.[0]
-                          if (f)
-                            updateQuestion(q.id, {
-                              image: await fileToDataUrl(f),
-                            })
-                        }}
-                      />
-                    </div>
-                  )}
-                  {hasOptions(q) && (
-                    <div className="flex flex-col gap-2">
-                      {q.type === "multi" && (
-                        <p className="text-sm text-muted-foreground">
-                          Tick every correct option. Players have to pick the
-                          exact set to score.
-                        </p>
-                      )}
-                      {q.options.map((opt, oi) => (
-                        <div key={oi} className="flex items-center gap-2">
-                          {q.type === "mc" ? (
-                            <input
-                              type="radio"
-                              title="Correct answer"
-                              checked={q.correct === oi}
-                              onChange={() =>
-                                updateQuestion(q.id, { correct: oi })
-                              }
-                            />
-                          ) : (
-                            <input
-                              type="checkbox"
-                              title="One of the correct answers"
-                              checked={q.correct.includes(oi)}
-                              onChange={(e) =>
-                                updateQuestion(q.id, {
-                                  correct: e.target.checked
-                                    ? [...q.correct, oi].sort((a, b) => a - b)
-                                    : q.correct.filter((x) => x !== oi),
-                                })
-                              }
-                            />
-                          )}
-                          <Input
-                            placeholder={`Option ${oi + 1}`}
-                            value={opt}
-                            onChange={(e) =>
-                              updateQuestion(q.id, {
-                                options: q.options.map((o, j) =>
-                                  j === oi ? e.target.value : o,
-                                ),
-                              })
-                            }
-                          />
-                          {q.options.length > 2 && (
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              onClick={() =>
-                                updateQuestion(q.id, {
-                                  options: q.options.filter((_, j) => j !== oi),
-                                  // the key is index-based, so dropping an
-                                  // option shifts everything after it down
-                                  ...(q.type === "mc"
-                                    ? {
-                                        correct:
-                                          q.correct >= oi && q.correct > 0
-                                            ? q.correct - 1
-                                            : q.correct,
-                                      }
-                                    : {
-                                        correct: q.correct
-                                          .filter((x) => x !== oi)
-                                          .map((x) => (x > oi ? x - 1 : x)),
-                                      }),
-                                })
-                              }
-                            >
-                              <Trash2 />
-                            </Button>
-                          )}
-                        </div>
-                      ))}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="self-start"
-                        onClick={() =>
-                          updateQuestion(q.id, { options: [...q.options, ""] })
-                        }
-                      >
-                        <Plus /> Option
-                      </Button>
-                    </div>
-                  )}
-                  {q.type === "sort" && (
-                    <div className="flex flex-col gap-2">
-                      <p className="text-sm text-muted-foreground">
-                        Top to bottom in the correct order. Players get them
-                        shuffled. The value is optional and shows at the reveal
-                        — and up front for the anchor, as a scale to reason
-                        against.
-                      </p>
-                      {q.correct.map((item, slot) => (
-                        <div key={item} className="flex items-center gap-2">
-                          <span className="w-5 shrink-0 text-center text-sm font-bold text-muted-foreground tabular-nums">
-                            {slot + 1}
+                      <CardContent className="flex flex-col gap-3 pt-4">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary">
+                            {typeLabels[q.type]}
+                          </Badge>
+                          <span className="text-sm text-muted-foreground">
+                            #{i + 1}
                           </span>
-                          <Input
-                            placeholder={`Item ${slot + 1}`}
-                            value={q.items[item]}
-                            onChange={(e) =>
-                              updateQuestion(q.id, {
-                                items: q.items.map((v, j) =>
-                                  j === item ? e.target.value : v,
-                                ),
-                              })
-                            }
-                          />
-                          <Input
-                            className="w-28"
-                            placeholder="value"
-                            value={q.values?.[item] ?? ""}
-                            onChange={(e) =>
-                              updateQuestion(q.id, {
-                                values: q.items.map((_, j) =>
-                                  j === item
-                                    ? e.target.value
-                                    : (q.values?.[j] ?? ""),
-                                ),
-                              })
-                            }
-                          />
-                          <input
-                            type="radio"
-                            title="Anchor — its value is given away up front"
-                            checked={q.anchor === item}
-                            onChange={() =>
-                              updateQuestion(q.id, { anchor: item })
-                            }
-                          />
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            title="Move up"
-                            disabled={slot === 0}
-                            onClick={() =>
-                              updateQuestion(q.id, { correct: swap(q.correct, slot, slot - 1) })
-                            }
-                          >
-                            <ChevronUp />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            title="Move down"
-                            disabled={slot === q.correct.length - 1}
-                            onClick={() =>
-                              updateQuestion(q.id, { correct: swap(q.correct, slot, slot + 1) })
-                            }
-                          >
-                            <ChevronDown />
-                          </Button>
-                          {q.correct.length > 2 && (
+                          {/* the same reorder by tapping, for touch and for anyone
+                        who would rather not drag a card down a long list */}
+                          <div className="ml-auto flex items-center gap-0.5">
                             <Button
                               variant="ghost"
                               size="icon-sm"
-                              title="Remove"
+                              title="Move up"
+                              disabled={i === 0}
+                              onClick={() => moveQuestion(i, i - 1)}
+                            >
+                              <ChevronUp />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              title="Move down"
+                              disabled={i === selected.questions.length - 1}
+                              onClick={() => moveQuestion(i, i + 1)}
+                            >
+                              <ChevronDown />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              title="Delete question"
                               onClick={() =>
-                                updateQuestion(q.id, {
-                                  items: q.items.filter((_, j) => j !== item),
-                                  values: q.values?.filter((_, j) => j !== item),
-                                  // indexes shift down past the removed item
-                                  correct: q.correct
-                                    .filter((x) => x !== item)
-                                    .map((x) => (x > item ? x - 1 : x)),
-                                  anchor:
-                                    q.anchor === item
-                                      ? undefined
-                                      : q.anchor !== undefined && q.anchor > item
-                                        ? q.anchor - 1
-                                        : q.anchor,
+                                updateSelected({
+                                  questions: selected.questions.filter(
+                                    (x) => x.id !== q.id
+                                  ),
                                 })
                               }
                             >
                               <Trash2 />
                             </Button>
-                          )}
+                          </div>
                         </div>
-                      ))}
-                      <div className="flex flex-wrap items-center gap-3">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            updateQuestion(q.id, {
-                              items: [...q.items, ""],
-                              values: [...(q.values ?? q.items.map(() => "")), ""],
-                              correct: [...q.correct, q.items.length],
-                            })
+                        <Input
+                          placeholder="Question text"
+                          value={q.text}
+                          onChange={(e) =>
+                            updateQuestion(q.id, { text: e.target.value })
                           }
-                        >
-                          <Plus /> Item
-                        </Button>
-                        {q.anchor !== undefined && (
+                        />
+                        {q.image ? (
+                          <div className="flex items-start gap-2">
+                            <img
+                              src={q.image}
+                              alt=""
+                              className="max-h-32 rounded-lg"
+                            />
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              title="Remove image"
+                              onClick={() =>
+                                updateQuestion(q.id, { image: undefined })
+                              }
+                            >
+                              <Trash2 />
+                            </Button>
+                          </div>
+                        ) : (
+                          <div>
+                            <Label htmlFor={`img-${q.id}`}>
+                              Image (optional — or paste one into this card)
+                            </Label>
+                            <Input
+                              id={`img-${q.id}`}
+                              type="file"
+                              accept="image/*"
+                              className="mt-1"
+                              onChange={async (e) => {
+                                const f = e.target.files?.[0]
+                                if (f)
+                                  updateQuestion(q.id, {
+                                    image: await fileToDataUrl(f),
+                                  })
+                              }}
+                            />
+                          </div>
+                        )}
+                        {hasOptions(q) && (
+                          <div className="flex flex-col gap-2">
+                            {q.type === "multi" && (
+                              <p className="text-sm text-muted-foreground">
+                                Tick every correct option. Players have to pick
+                                the exact set to score.
+                              </p>
+                            )}
+                            {q.options.map((opt, oi) => (
+                              <div key={oi} className="flex items-center gap-2">
+                                {q.type === "mc" ? (
+                                  <input
+                                    type="radio"
+                                    title="Correct answer"
+                                    checked={q.correct === oi}
+                                    onChange={() =>
+                                      updateQuestion(q.id, { correct: oi })
+                                    }
+                                  />
+                                ) : (
+                                  <input
+                                    type="checkbox"
+                                    title="One of the correct answers"
+                                    checked={q.correct.includes(oi)}
+                                    onChange={(e) =>
+                                      updateQuestion(q.id, {
+                                        correct: e.target.checked
+                                          ? [...q.correct, oi].sort(
+                                              (a, b) => a - b
+                                            )
+                                          : q.correct.filter((x) => x !== oi),
+                                      })
+                                    }
+                                  />
+                                )}
+                                <Input
+                                  placeholder={`Option ${oi + 1}`}
+                                  value={opt}
+                                  onChange={(e) =>
+                                    updateQuestion(q.id, {
+                                      options: q.options.map((o, j) =>
+                                        j === oi ? e.target.value : o
+                                      ),
+                                    })
+                                  }
+                                />
+                                {q.options.length > 2 && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    onClick={() =>
+                                      updateQuestion(q.id, {
+                                        options: q.options.filter(
+                                          (_, j) => j !== oi
+                                        ),
+                                        // the key is index-based, so dropping an
+                                        // option shifts everything after it down
+                                        ...(q.type === "mc"
+                                          ? {
+                                              correct:
+                                                q.correct >= oi && q.correct > 0
+                                                  ? q.correct - 1
+                                                  : q.correct,
+                                            }
+                                          : {
+                                              correct: q.correct
+                                                .filter((x) => x !== oi)
+                                                .map((x) =>
+                                                  x > oi ? x - 1 : x
+                                                ),
+                                            }),
+                                      })
+                                    }
+                                  >
+                                    <Trash2 />
+                                  </Button>
+                                )}
+                              </div>
+                            ))}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="self-start"
+                              onClick={() =>
+                                updateQuestion(q.id, {
+                                  options: [...q.options, ""],
+                                })
+                              }
+                            >
+                              <Plus /> Option
+                            </Button>
+                          </div>
+                        )}
+                        {q.type === "sort" && (
+                          <div className="flex flex-col gap-2">
+                            <p className="text-sm text-muted-foreground">
+                              Top to bottom in the correct order. Players get
+                              them shuffled. The value is optional and shows at
+                              the reveal — and up front for the anchor, as a
+                              scale to reason against.
+                            </p>
+                            {q.correct.map((item, slot) => (
+                              <div
+                                key={item}
+                                className="flex items-center gap-2"
+                              >
+                                <span className="w-5 shrink-0 text-center text-sm font-bold text-muted-foreground tabular-nums">
+                                  {slot + 1}
+                                </span>
+                                <Input
+                                  placeholder={`Item ${slot + 1}`}
+                                  value={q.items[item]}
+                                  onChange={(e) =>
+                                    updateQuestion(q.id, {
+                                      items: q.items.map((v, j) =>
+                                        j === item ? e.target.value : v
+                                      ),
+                                    })
+                                  }
+                                />
+                                <Input
+                                  className="w-28"
+                                  placeholder="value"
+                                  value={q.values?.[item] ?? ""}
+                                  onChange={(e) =>
+                                    updateQuestion(q.id, {
+                                      values: q.items.map((_, j) =>
+                                        j === item
+                                          ? e.target.value
+                                          : (q.values?.[j] ?? "")
+                                      ),
+                                    })
+                                  }
+                                />
+                                <input
+                                  type="radio"
+                                  title="Anchor — its value is given away up front"
+                                  checked={q.anchor === item}
+                                  onChange={() =>
+                                    updateQuestion(q.id, { anchor: item })
+                                  }
+                                />
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  title="Move up"
+                                  disabled={slot === 0}
+                                  onClick={() =>
+                                    updateQuestion(q.id, {
+                                      correct: swap(q.correct, slot, slot - 1),
+                                    })
+                                  }
+                                >
+                                  <ChevronUp />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon-sm"
+                                  title="Move down"
+                                  disabled={slot === q.correct.length - 1}
+                                  onClick={() =>
+                                    updateQuestion(q.id, {
+                                      correct: swap(q.correct, slot, slot + 1),
+                                    })
+                                  }
+                                >
+                                  <ChevronDown />
+                                </Button>
+                                {q.correct.length > 2 && (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    title="Remove"
+                                    onClick={() =>
+                                      updateQuestion(q.id, {
+                                        items: q.items.filter(
+                                          (_, j) => j !== item
+                                        ),
+                                        values: q.values?.filter(
+                                          (_, j) => j !== item
+                                        ),
+                                        // indexes shift down past the removed item
+                                        correct: q.correct
+                                          .filter((x) => x !== item)
+                                          .map((x) => (x > item ? x - 1 : x)),
+                                        anchor:
+                                          q.anchor === item
+                                            ? undefined
+                                            : q.anchor !== undefined &&
+                                                q.anchor > item
+                                              ? q.anchor - 1
+                                              : q.anchor,
+                                      })
+                                    }
+                                  >
+                                    <Trash2 />
+                                  </Button>
+                                )}
+                              </div>
+                            ))}
+                            <div className="flex flex-wrap items-center gap-3">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                  updateQuestion(q.id, {
+                                    items: [...q.items, ""],
+                                    values: [
+                                      ...(q.values ?? q.items.map(() => "")),
+                                      "",
+                                    ],
+                                    correct: [...q.correct, q.items.length],
+                                  })
+                                }
+                              >
+                                <Plus /> Item
+                              </Button>
+                              {q.anchor !== undefined && (
+                                <>
+                                  <label className="flex items-center gap-1.5 text-sm">
+                                    <input
+                                      type="checkbox"
+                                      checked={q.anchorLocked ?? false}
+                                      onChange={(e) =>
+                                        updateQuestion(q.id, {
+                                          anchorLocked: e.target.checked,
+                                        })
+                                      }
+                                    />
+                                    Hard anchor (also locked in its slot)
+                                  </label>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() =>
+                                      updateQuestion(q.id, {
+                                        anchor: undefined,
+                                        anchorLocked: undefined,
+                                      })
+                                    }
+                                  >
+                                    No anchor
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        {hasAnswerText(q) && (
+                          <Input
+                            placeholder="Answer (shown when the round is closed, optional)"
+                            value={q.answer ?? ""}
+                            onChange={(e) =>
+                              updateQuestion(q.id, { answer: e.target.value })
+                            }
+                          />
+                        )}
+                        {q.type === "reveal" && (
                           <>
-                            <label className="flex items-center gap-1.5 text-sm">
-                              <input
-                                type="checkbox"
-                                checked={q.anchorLocked ?? false}
+                            <div className="flex flex-wrap gap-4">
+                              {allFilters.map((f) => (
+                                <label
+                                  key={f}
+                                  className="flex items-center gap-1.5 text-sm"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={q.filters.includes(f)}
+                                    onChange={(e) =>
+                                      updateQuestion(q.id, {
+                                        filters: e.target.checked
+                                          ? [...q.filters, f]
+                                          : q.filters.filter((x) => x !== f),
+                                      })
+                                    }
+                                  />
+                                  {f}
+                                </label>
+                              ))}
+                            </div>
+                            <div>
+                              <Label htmlFor={`timer-${q.id}`}>
+                                Reveal timer in seconds (empty = step manually
+                                while hosting)
+                              </Label>
+                              <Input
+                                id={`timer-${q.id}`}
+                                type="number"
+                                className="mt-1 w-40"
+                                value={q.revealSeconds ?? ""}
                                 onChange={(e) =>
                                   updateQuestion(q.id, {
-                                    anchorLocked: e.target.checked,
+                                    revealSeconds: e.target.value
+                                      ? Number(e.target.value)
+                                      : undefined,
                                   })
                                 }
                               />
-                              Hard anchor (also locked in its slot)
-                            </label>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                updateQuestion(q.id, {
-                                  anchor: undefined,
-                                  anchorLocked: undefined,
-                                })
-                              }
-                            >
-                              No anchor
-                            </Button>
+                            </div>
+                            {q.image && q.filters.length > 0 && (
+                              <RevealPreview
+                                image={q.image}
+                                filters={q.filters}
+                                zoom={q.zoom ?? { x: 0.5, y: 0.5 }}
+                                onZoom={(zoom) =>
+                                  updateQuestion(q.id, { zoom })
+                                }
+                              />
+                            )}
                           </>
                         )}
-                      </div>
-                    </div>
-                  )}
-                  {hasAnswerText(q) && (
-                    <Input
-                      placeholder="Answer (shown when the round is closed, optional)"
-                      value={q.answer ?? ""}
-                      onChange={(e) =>
-                        updateQuestion(q.id, { answer: e.target.value })
-                      }
-                    />
-                  )}
-                  {q.type === "reveal" && (
-                    <>
-                      <div className="flex flex-wrap gap-4">
-                        {allFilters.map((f) => (
-                          <label
-                            key={f}
-                            className="flex items-center gap-1.5 text-sm"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={q.filters.includes(f)}
-                              onChange={(e) =>
-                                updateQuestion(q.id, {
-                                  filters: e.target.checked
-                                    ? [...q.filters, f]
-                                    : q.filters.filter((x) => x !== f),
-                                })
-                              }
-                            />
-                            {f}
-                          </label>
-                        ))}
-                      </div>
-                      <div>
-                        <Label htmlFor={`timer-${q.id}`}>
-                          Reveal timer in seconds (empty = step manually while
-                          hosting)
-                        </Label>
-                        <Input
-                          id={`timer-${q.id}`}
-                          type="number"
-                          className="mt-1 w-40"
-                          value={q.revealSeconds ?? ""}
-                          onChange={(e) =>
-                            updateQuestion(q.id, {
-                              revealSeconds: e.target.value
-                                ? Number(e.target.value)
-                                : undefined,
-                            })
-                          }
-                        />
-                      </div>
-                      {q.image && q.filters.length > 0 && (
-                        <RevealPreview
-                          image={q.image}
-                          filters={q.filters}
-                          zoom={q.zoom ?? { x: 0.5, y: 0.5 }}
-                          onZoom={(zoom) => updateQuestion(q.id, { zoom })}
-                        />
-                      )}
-                    </>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
+                      </CardContent>
+                    </Card>
+                  </SortableQuestion>
+                ))}
+              </SortableContext>
+            </DndContext>
 
             <div className="flex gap-2">
               {(Object.keys(typeLabels) as Array<QuestionType>).map((t) => (

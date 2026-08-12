@@ -39,13 +39,19 @@ export const Route = createRootRoute({
         content: "width=device-width, initial-scale=1",
       },
       {
-        title: "TanStack Start Starter",
+        title: "Gameshow",
       },
     ],
     links: [
       {
         rel: "stylesheet",
         href: appCss,
+      },
+      // an svg favicon, so one file covers every size the browser asks for
+      {
+        rel: "icon",
+        href: "/icon.svg",
+        type: "image/svg+xml",
       },
     ],
   }),
