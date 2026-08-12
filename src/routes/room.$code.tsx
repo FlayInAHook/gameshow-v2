@@ -338,9 +338,18 @@ function PlayerView({
                   {signed(state.settings.multiPointsWrong)}.
                 </p>
               )}
-              <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2">
+              {/* keyed on the question so the options land again on the next
+                  one instead of the grid quietly re-using its rows */}
+              <div
+                key={q.id}
+                className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2"
+              >
                 {q.options.map((opt, i) => (
-                  <div key={i} className="flex min-w-0 flex-col gap-1">
+                  <div
+                    key={i}
+                    className="pop-in flex min-w-0 flex-col gap-1"
+                    style={{ animationDelay: `${i * 0.09}s` }}
+                  >
                     <McOption
                       option={opt}
                       // from the round, not the question: the answer key never

@@ -139,3 +139,22 @@
 .lb-row {
   animation: lb-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
+
+/* answers landing on the board one after another. the stagger is an inline
+   animation-delay per index — gsap would be a dependency for one keyframe */
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.94);
+  }
+}
+.pop-in {
+  animation: pop-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lb-row,
+  .pop-in {
+    animation: none;
+  }
+}
